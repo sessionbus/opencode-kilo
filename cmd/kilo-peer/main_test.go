@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/antst/sessionbus-peers/wrappers/host"
+	"github.com/sessionbus/peer-common/host"
 )
 
 func TestLaneModeRejectsArguments(t *testing.T) {

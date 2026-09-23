@@ -3,7 +3,7 @@
 This is a measurement of source **b71a396b0fb184df886d2b8d83a834283a0df2b7**,
 its two Linux/amd64 archives, and the retained installation snapshot from
 2026-09-11 08:20:01 UTC. It is not final acceptance or a current host observation.
-The historical [OpenCode measurement](../opencode-0.5.0/SIZE.md) remains unchanged.
+The historical [OpenCode measurement](../opencode-0.5.0/SIZE.json) remains unchanged.
 [SIZE.json](SIZE.json) contains per-file hashes, exact input bindings, archive
 members, dependency selections, native prerequisite observations and scope notes.
 

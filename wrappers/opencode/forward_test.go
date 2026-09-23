@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/antst/sessionbus-peers/internal/pluginstage"
-	"github.com/antst/sessionbus-peers/internal/testsocket"
-	"github.com/antst/sessionbus-peers/wrappers/mcp"
+	"github.com/sessionbus/opencode-kilo/internal/pluginstage"
+	"github.com/sessionbus/peer-common/mcp"
+	"github.com/sessionbus/peer-common/testsocket"
 )
 
 type forwardOwner struct {

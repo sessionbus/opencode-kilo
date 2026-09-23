@@ -16,7 +16,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/antst/sessionbus-peers/wrappers/host"
+	"github.com/sessionbus/peer-common/host"
 )
 
 const OpenCodeInteractiveLaunchEnv = "SESSIONBUS_OPENCODE_LAUNCH"

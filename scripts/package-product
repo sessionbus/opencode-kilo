@@ -3,7 +3,7 @@
 set -eu
 product=${1:?usage: scripts/package-product PRODUCT OUTPUT_DIRECTORY}
 out=${2:?usage: scripts/package-product PRODUCT OUTPUT_DIRECTORY}
-case "$product" in grok|qwen|opencode|kilo|pi|omp) ;; *) echo 'Use package-claude or package-codex for those products.' >&2; exit 1;; esac
+case "$product" in opencode|kilo) ;; *) echo 'Unsupported product; use opencode or kilo.' >&2; exit 1;; esac
 mkdir -p "$out"
 out=$(CDPATH='' cd "$out" && pwd -P)
 repo=$(CDPATH='' cd "$(dirname "$0")/.." && pwd -P)
@@ -28,16 +28,6 @@ if [ "$product" = opencode ] || [ "$product" = kilo ]; then
  tar -xzf "$stage/$packed" -C "$stage/plugin" --strip-components=1
  cp "$product/package-lock.json" "$stage/plugin/"
  npm ci --prefix "$stage/plugin" --omit=dev --ignore-scripts
-elif [ "$product" = pi ]; then
- mkdir -p "$stage/plugin/pi" "$stage/plugin/pifamily/extension"
- cp wrappers/pi/extension.mjs wrappers/pi/native.mjs "$stage/plugin/pi/"
- cp wrappers/pifamily/extension/bridge.mjs "$stage/plugin/pifamily/extension/"
-elif [ "$product" = omp ]; then
- mkdir -p "$stage/plugin/omp" "$stage/plugin/pifamily/extension"
- cp wrappers/omp/extension.mjs "$stage/plugin/omp/"
- cp wrappers/pifamily/extension/bridge.mjs "$stage/plugin/pifamily/extension/"
-else
- cp -R "$product/." "$stage/plugin/"
 fi
 cp scripts/release/THIRD-PARTY-NOTICES.txt LICENSE "$stage/"
 printf '%s\n' "$peer_revision" > "$stage/SOURCE.txt"
@@ -45,8 +35,4 @@ cp scripts/release/install-product "$stage/install"
 if [ -f "$product/README.md" ]; then cp "$product/README.md" "$stage/README.md"; else cp "docs/products/$product.md" "$stage/README.md"; fi
 printf '%s\n' "$product" > "$stage/ROLE"
 set -- "$product-peer"
-if [ "$product" = grok ] || [ "$product" = qwen ]; then
- ln -s "$product-peer" "$stage/$product-peer-mcp"
- set -- "$@" "$product-peer-mcp"
-fi
 tar -czf "$out/$product-peer-$platform-$arch.tar.gz" -C "$stage" "$@" plugin LICENSE THIRD-PARTY-NOTICES.txt README.md install ROLE SOURCE.txt

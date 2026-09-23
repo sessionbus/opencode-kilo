@@ -2,7 +2,7 @@ name: Package checks and scoped previews
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -54,7 +54,7 @@ jobs:
             throw new Error(`unexpected native plugin pack files: ${JSON.stringify(got)}`)
           }
           const manifest = require('./package.json')
-          if (manifest.repository?.url !== 'git+https://github.com/antst/sessionbus-peers.git' ||
+          if (manifest.repository?.url !== 'git+https://github.com/sessionbus/opencode-kilo.git' ||
               manifest.repository?.directory !== process.env.PRODUCT) {
             throw new Error('Native plugin repository metadata is invalid')
           }
@@ -63,20 +63,3 @@ jobs:
           done
       # pkg-pr-new consumes one registration per workflow, including matrix jobs.
       - run: npx --yes pkg-pr-new publish "$RUNNER_TEMP/native-plugin/opencode" "$RUNNER_TEMP/native-plugin/kilo"
-
-  claude-package:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.24.x'
-          cache: true
-      - name: Verify Claude Go archive and installed layout
-        run: |
-          go test -race ./wrappers/claude/interactive ./cmd/claude-peer
-          ./scripts/package-claude "${RUNNER_TEMP}/claude archive"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: claude-go-linux-amd64
-          path: ${{ runner.temp }}/claude archive/*.tar.gz

@@ -44,7 +44,7 @@ func stageMatchesManifestAndCommonSource(t *testing.T, product string) {
 			modules = append(modules, name)
 		}
 	}
-	expected := []string{"package.json", "package-lock.json"}
+	expected := []string{"LICENSE", "package.json", "package-lock.json"}
 	for _, name := range manifest.Files {
 		if strings.HasSuffix(name, ".mjs") {
 			declared = append(declared, name)
@@ -99,6 +99,17 @@ func stageMatchesManifestAndCommonSource(t *testing.T, product string) {
 	sort.Strings(got)
 	if !reflect.DeepEqual(expected, got) {
 		t.Fatalf("staged files %v differ from declared files %v", got, expected)
+	}
+	wantLicense, err := os.ReadFile(filepath.Join(repo, "LICENSE"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotLicense, err := os.ReadFile(filepath.Join(stage, "LICENSE"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(gotLicense, wantLicense) {
+		t.Fatal("staged LICENSE differs from repository LICENSE")
 	}
 }
 

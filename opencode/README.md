@@ -3,7 +3,7 @@
 Install the permanent Go launcher and native plugin on Linux or macOS:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/antst/sessionbus-peers/main/scripts/install-opencode.sh | sh
+curl -fsSL https://raw.githubusercontent.com/sessionbus/opencode-kilo/main/scripts/install-opencode.sh | sh
 opencode-peer -n project -g development,reviews
 ```
 
@@ -116,7 +116,7 @@ are outside these wrapper bounds. Kit ready reassignment is observed at its
 pinned reconnect scheduler boundary; a failed attempt is never hello admission.
 
 The rewrite's verified acceptance scopes and retained limitations are recorded in
-[the acceptance index](https://github.com/antst/sessionbus-peers/blob/develop/docs/designs/opencode-0.5.0/ACCEPTANCE.md). Historical
+[the acceptance index](../docs/designs/opencode-0.5.0/ACCEPTANCE.md). Historical
 product probes remain separately identified in the product facts.
 
 Local package installation (`--plugin-dir` or a validated `file:` package directory)

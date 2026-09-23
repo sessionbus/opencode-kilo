@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 package opencode
 
-import "github.com/antst/sessionbus-peers/wrappers/opencodefamily"
+import "github.com/sessionbus/opencode-kilo/wrappers/opencodefamily"
 
 const (
 	Product       = opencodefamily.Product

@@ -1,7 +1,3 @@
-# Product wrappers
+# OpenCode-family wrappers
 
-This split-ready tree contains product-named launchers, resident wrappers,
-plugins, tests, and packaging. Wrapper code imports the bus only through
-`github.com/antst/sessionbus/bus/sdk/go`; it never imports daemon internals.
-Repository-local wrapper imports use
-`github.com/antst/sessionbus-peers/wrappers/...`.
+`opencode` and `kilo` retain separate launch, permission and install policies. `opencodefamily` contains their shared native plugin delivery and lifecycle implementation. The plugin registers the `sessionbus` tool in the product's existing Bun runtime. Build-time Node/npm assembles the published package; the Go maintenance executable installs it.
