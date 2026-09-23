@@ -12,4 +12,50 @@ The first product-scoped hosted scans scored 76 against the unchanged 80 thresho
 
 The product facts and design records remain historical. `measure.py`, `SIZE.json` and `SIZE.md` record the original multi-product source tree and cannot be rerun as current extraction measurements. Their deleted cross-product paths resolve at the immutable baseline, not in this repository. The product facts' source citations likewise refer to original commits/paths. No product history, tested native behavior, or previous regression fix is intentionally discarded.
 
-The original `feature/release-install` branch is archived and adds no unique OpenCode/Kilo fix above this baseline. UMKA installed-state inventory, real-home installation, fresh native acceptance and any release are separate work.
+The original `feature/release-install` branch is archived and adds no unique OpenCode/Kilo fix above this baseline.
+
+## Permanent installation and fresh behavior
+
+Both final `a1177770` Linux archives were installed and reinstalled in the real
+UMKA home. Under `/home/antst/sessionbus-evidence`, the independently reviewed
+OpenCode install packet
+`opencode-kilo-extraction-dev2-20260923/BINDING-OPENCODE-dev1.json` records the
+replacement of `b2330276` with binary `3168c64d`; the Kilo packet
+`opencode-kilo-installed-dev1-20260923/BINDING-KILO-dev1.json` records the
+replacement of `3722de39` with binary `959ccecf`. Each pair of installer runs
+exited successfully and produced equal safe installed observations. Installed
+archive members, public aliases, registration and source bytes matched their
+reviewed archives; the other product's installation and the Sessionbus service
+remained unchanged. OpenCode 1.18.32 and Kilo 7.6.2 identify the observed
+native versions, not a compatibility allowlist. Installation proves installed
+bytes and layout; the cells below establish behavior separately.
+
+OpenCode has four fresh **original-driver** passes on the installed build:
+OCW923B managed idle, OCW923C managed active, OCW923E interactive idle and
+OCW923F interactive active. Each cell retained one written or queued inbound,
+an exact native Sessionbus reply, the requested native final and owned cleanup.
+The interactive cells used an initial prompt in native argv, with zero PTY
+writes; active cells retained their original live Bash witness at delivery.
+OCW923A and OCW923D remain separate first-failure launcher packets and are not
+counted as clean passes. Their subsequent harness corrections were tested by
+fresh cells rather than rewriting those outcomes.
+
+Kilo has two fresh **original-driver** passes on the installed build: KLW923A
+managed active and KLW923B managed idle. KLW923A explicitly selected the
+config-defined `sessionbus-wake-acceptance-20260922` agent, whose retained
+rules ask for other Bash commands and allow the exact `/usr/bin/sleep 45` used
+by the test. Its agent-provenance note was added retrospectively and does not
+change the original cell outcome. KLW923B explicitly selected the built-in
+`code` agent with `--agent code`; no Kilo configuration or permission edit was
+made for that idle test. Kilo interactive idle and active are **untested and
+held** because a Kilo-specific acceptance harness has not been reviewed. They
+are not recorded as product failures or as a native limitation.
+
+The cell packets are under
+`/home/antst/sessionbus-evidence/opencode-kilo-live-dev1-20260923` by the IDs
+above. Direct replies are retained as operator-attested raw Sessionbus
+notifications and joined to the native Sessionbus send results; they are not
+cryptographic receipts. The reviewed runner and launcher manifests precede
+the clean cells. These installed results make no tag, release, or version
+change. Binary-release and package-preview publishing remain disabled and
+held pending separate authorization.
