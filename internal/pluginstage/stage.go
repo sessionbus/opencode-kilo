@@ -64,6 +64,11 @@ func Stage(repo, product, destination string, tests bool) error {
 			return err
 		}
 	}
+	// npm includes a staged LICENSE in the published package. The release
+	// archive also carries this same file at its root.
+	if err := copyFile(filepath.Join(repo, "LICENSE"), "LICENSE"); err != nil {
+		return err
+	}
 	if err := copyFile(filepath.Join(repo, "wrappers", "opencodefamily", "plugin", "sessionbus-tool.json"), "sessionbus-tool.json"); err != nil {
 		return err
 	}
