@@ -1,0 +1,3146 @@
+{
+  "source": "710e5d33369cba4fb9468cd24fea0fe844a0219d",
+  "status": "extracted preservation mapping; source baseline hashes retained",
+  "shared_module": {
+    "module": "github.com/sessionbus/peer-common",
+    "version": "v0.0.0-20260922143100-eb655f686e44",
+    "commit": "eb655f686e4456a4c1121054763318e3d27e89b0"
+  },
+  "file_count": 154,
+  "test_function_count": 171,
+  "js_test_count": 62,
+  "files": [
+    {
+      "path": ".github/workflows/pkg-pr-new.yml",
+      "sha256": "d55a9bbfd82266e94cd4946ccca119a072551c082e5e4a100b42feef4e175e70",
+      "git_blob": "5e88a946ab7d672be8b2dc2f88d1aa7f1bfb61f3",
+      "mode": "100644",
+      "class": "shared-product-surface",
+      "permitted_change": "Claude package job removed; native opencode/kilo verify-and-preview job byte-identical except the canonical repository URL check",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": ".github/workflows/pkg-pr-new.yml"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": ".github/workflows/pkg-pr-new.yml"
+      }
+    },
+    {
+      "path": "cmd/kilo-peer/main.go",
+      "sha256": "23cf4d1e56688f674dd1cc5cb5b622ce0c20a13a82dfff792d18f21c28db9e95",
+      "git_blob": "2d127afcbb3197a5c2b4b7a43063b001cba138b0",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "cmd/kilo-peer/main.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "cmd/kilo-peer/main.go"
+      }
+    },
+    {
+      "path": "cmd/kilo-peer/main_test.go",
+      "sha256": "efa3683ef7824a6525798b038043db560b048c7fc636936c3fad0d45da025086",
+      "git_blob": "29b7029486c2ec9d00a54e51cac629422bd1f667",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestLaneModeRejectsArguments"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "cmd/kilo-peer/main_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "cmd/kilo-peer/main_test.go"
+      }
+    },
+    {
+      "path": "cmd/opencode-peer/main.go",
+      "sha256": "44cf5504a8a00d96d0afbfa7407b549ea12270cbc439750661f9be4f8728a95a",
+      "git_blob": "464cf5ab71f6c79d576c8207157aba802cd9f6c1",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "cmd/opencode-peer/main.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "cmd/opencode-peer/main.go"
+      }
+    },
+    {
+      "path": "cmd/opencode-peer/main_test.go",
+      "sha256": "efa3683ef7824a6525798b038043db560b048c7fc636936c3fad0d45da025086",
+      "git_blob": "29b7029486c2ec9d00a54e51cac629422bd1f667",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestLaneModeRejectsArguments"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "cmd/opencode-peer/main_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "cmd/opencode-peer/main_test.go"
+      }
+    },
+    {
+      "path": "docs/designs/kilo-0.5.0/ACCEPTANCE.md",
+      "sha256": "0dceca83441883d080ba512ddf36db9677a77e6210d9ff757b3878fcbfc3aa46",
+      "git_blob": "5864a8ae61ee2846fbf916964a502e3ae5a7e36a",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/designs/kilo-0.5.0/ACCEPTANCE.md"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/designs/kilo-0.5.0/ACCEPTANCE.md"
+      }
+    },
+    {
+      "path": "docs/designs/kilo-0.5.0/IMPLEMENTATION.md",
+      "sha256": "042efb9f6465d933c4af477c9647ac1d7a48e5dcf3df1dc2a524943ea9cb6fc7",
+      "git_blob": "9a9e2787127b37f3dbc5ae79591952fb53053ca9",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/designs/kilo-0.5.0/IMPLEMENTATION.md"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/designs/kilo-0.5.0/IMPLEMENTATION.md"
+      }
+    },
+    {
+      "path": "docs/designs/kilo-0.5.0/SIZE.json",
+      "sha256": "63f845f4a42258cb00cb82b6bb9ff96e83964e6dd39df99493cd9b0dbce4295c",
+      "git_blob": "15165359e3540e83d08e452a9a9edb4d62d49f49",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/designs/kilo-0.5.0/SIZE.json"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/designs/kilo-0.5.0/SIZE.json"
+      }
+    },
+    {
+      "path": "docs/designs/kilo-0.5.0/SIZE.md",
+      "sha256": "a96c1b308a123cb494bcc1a62b002ba0f4f862160edfe9cb4adaa43b9fa1ba6b",
+      "git_blob": "f369c296b3ad036380417e7e914095753391c2fa",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/designs/kilo-0.5.0/SIZE.md"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/designs/kilo-0.5.0/SIZE.md"
+      }
+    },
+    {
+      "path": "docs/designs/kilo-0.5.0/measure.py",
+      "sha256": "e9545657f5507186de4d6d6dbef0ded7cb4cf8748ca40526b5b1a44eb8653871",
+      "git_blob": "91b0bf821000e988bcd22e3e90d1a0de854c6091",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/designs/kilo-0.5.0/measure.py"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/designs/kilo-0.5.0/measure.py"
+      }
+    },
+    {
+      "path": "docs/designs/opencode-0.5.0/ACCEPTANCE.md",
+      "sha256": "c0bdfc8e451f47eebbe0ced1ff63e60622dde7fb66ae8fa68cda26af3df63616",
+      "git_blob": "8c12a654ff7dab3be1dec4ad7c66b3d7f3faa6fc",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/designs/opencode-0.5.0/ACCEPTANCE.md"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/designs/opencode-0.5.0/ACCEPTANCE.md"
+      }
+    },
+    {
+      "path": "docs/designs/opencode-0.5.0/IMPLEMENTATION.md",
+      "sha256": "dea91ed1a45d66cf0e6d41f6701e0ae3bb86523a5e7c56fcf5afc73173858d15",
+      "git_blob": "b4b0d0bd7a3a3a77e2b54cd7b896d3c97d089a60",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/designs/opencode-0.5.0/IMPLEMENTATION.md"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/designs/opencode-0.5.0/IMPLEMENTATION.md"
+      }
+    },
+    {
+      "path": "docs/designs/opencode-0.5.0/SIZE.json",
+      "sha256": "2b9c19caa62dc12c4b5f9cf007e1216a27c8768af1de468957d1c585856e413c",
+      "git_blob": "3be8c991c70ec77cbccfc662e50448b5da33b551",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/designs/opencode-0.5.0/SIZE.json"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/designs/opencode-0.5.0/SIZE.json"
+      }
+    },
+    {
+      "path": "docs/designs/opencode-0.5.0/measure.py",
+      "sha256": "afbc0a865e4146a61db8c55cd9ce78aa7b48d235f701065043c049e3ed0eb53e",
+      "git_blob": "475dacf027798074469ee55f4a13db6a25100071",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/designs/opencode-0.5.0/measure.py"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/designs/opencode-0.5.0/measure.py"
+      }
+    },
+    {
+      "path": "docs/products/kilo.md",
+      "sha256": "df7c8391e8b6c657adf68dd3b2f34d3c36d73fd382ae2cdebc3e082e8a04648f",
+      "git_blob": "ecca406206f052b76691518ad8642c9976412c12",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/products/kilo.md"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/products/kilo.md"
+      }
+    },
+    {
+      "path": "docs/products/opencode.md",
+      "sha256": "f99c7c71ce5a3550a9eb3e53d05d44dd8b1917f474bc7a80095e536ee74ff6cf",
+      "git_blob": "29e1fc8df706dab2a776d3a4b1073c7a6af9a8de",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/products/opencode.md"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "docs/products/opencode.md"
+      }
+    },
+    {
+      "path": "internal/cmd/gen-opencode-tool/main.go",
+      "sha256": "4ea45fa3f3536eeb24ad910d34b9ab2993f36b794d22a9975ca2cf50457d9fb1",
+      "git_blob": "16af5a2951bbc75a04f4bdd2e758209b67e4e559",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "internal/cmd/gen-opencode-tool/main.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "internal/cmd/gen-opencode-tool/main.go"
+      }
+    },
+    {
+      "path": "internal/cmd/stage-native-plugin/main.go",
+      "sha256": "bf6e6e3c900f1737a4ddd8a0c812beef6f9d3ebe0394c7fb3b977992dfd5957f",
+      "git_blob": "bf57328b56d6b3849f6f302b078560ff31005570",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "internal/cmd/stage-native-plugin/main.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "internal/cmd/stage-native-plugin/main.go"
+      }
+    },
+    {
+      "path": "internal/peerversion/version.go",
+      "sha256": "eba3a70af92bd7c53ca78422fc96b6b223c1cd81eca72a09430499a042982d2d",
+      "git_blob": "4026bc9e7e5b20ca11ffe6b8fdab54714960ecae",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "peerversion/version.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "peerversion/version.go"
+      }
+    },
+    {
+      "path": "internal/peerversion/version_test.go",
+      "sha256": "10e619661cebe9dd7ac3c34e9d60a57ecf76cd48b1334cc501499968a1817aee",
+      "git_blob": "8e04c0a6a2cb608ae3d47c502793248538d88a93",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [
+        "TestResolvePublicVersionAndNativeEscape",
+        "TestResolveKeepsPrivateAndNonExactArguments"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "peerversion/version_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "peerversion/version_test.go"
+      }
+    },
+    {
+      "path": "internal/pluginstage/skill.go",
+      "sha256": "5ea9aa2b357ed2703e9be3e75324805c4e0b90c87095727a6df731529a10502a",
+      "git_blob": "ed58f7be51e2a825300572d20f3bdc516b527e4e",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "internal/pluginstage/skill.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "internal/pluginstage/skill.go"
+      }
+    },
+    {
+      "path": "internal/pluginstage/stage.go",
+      "sha256": "5a2f56c9f96c5633d8dbdce61851d93383bf2c4acd352e0d82ca913d39c8f64b",
+      "git_blob": "6866942205c6fa1a1fcf142f5cad789be3cfc4a1",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "internal/pluginstage/stage.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "internal/pluginstage/stage.go"
+      }
+    },
+    {
+      "path": "internal/pluginstage/stage_test.go",
+      "sha256": "390bf1c37010ceaa2089bd1608861bfa53c061b90a876b1b2499b3733022ecd3",
+      "git_blob": "7fd0751560b15b9e4c2afef1665a22adc7d52f8e",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestStageMatchesManifestAndCommonSource",
+        "TestStageIncludesEveryDevelopmentTest"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "internal/pluginstage/stage_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "internal/pluginstage/stage_test.go"
+      }
+    },
+    {
+      "path": "internal/testsocket/directory.go",
+      "sha256": "373cdb0e9219c4235ff88dc11a30987bec1725939a6e02df58087adf00ce74c0",
+      "git_blob": "9268dbbaf3b13ffbeb8efc4b5eb9c5befb350bd8",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "testsocket/directory.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "testsocket/directory.go"
+      }
+    },
+    {
+      "path": "internal/testsocket/directory_test.go",
+      "sha256": "6e40eed060759a1eaf1cac5e552bed9113e5e5e28e0132e597ce16a741e696dc",
+      "git_blob": "bb34848ac0b2c594ec75ad56ddc338e4b714f260",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [
+        "TestDirectoryUsesDefaultSessionSocketParent",
+        "TestDirectoryResolvesSymlinkBeforeBindingSocket"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "testsocket/directory_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "testsocket/directory_test.go"
+      }
+    },
+    {
+      "path": "kilo/README.md",
+      "sha256": "9688605ec2e78455deb5f577c5e0adba6cbe4c8728d392ebeb408c52ba1c9217",
+      "git_blob": "66a8d17fec1fd70ed3b0bc421fa9a6339196b185",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "canonical repository/release URL github.com/antst/sessionbus-peers -> github.com/sessionbus/opencode-kilo only (if a canonical URL is repointed)",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "kilo/README.md"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "kilo/README.md"
+      }
+    },
+    {
+      "path": "kilo/package-lock.json",
+      "sha256": "2ee5c90a6ca97c8d7af7e47128231c1a669b568c4d24613ae30c9616c06c0690",
+      "git_blob": "f30d00b59ab97f8b277a815903723b674dc0c6e9",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "kilo/package-lock.json"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "kilo/package-lock.json"
+      }
+    },
+    {
+      "path": "kilo/package.json",
+      "sha256": "71f0893fbce4c070ba900aade611007c3cc32f88a3c657defec7dbc31d785abf",
+      "git_blob": "5ab1a0771421c592a49ce7dcc9192cb64fda3cf4",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "canonical repository/release URL github.com/antst/sessionbus-peers -> github.com/sessionbus/opencode-kilo only (if a canonical URL is repointed)",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "kilo/package.json"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "kilo/package.json"
+      }
+    },
+    {
+      "path": "opencode/README.md",
+      "sha256": "ebbccd4bb3b9545b7cd1da6a50b722dfa7f076d6a8e45b887893aac284ebf22a",
+      "git_blob": "2df3287c106d69800c0d7ab162fcc356a62cfb19",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "canonical repository/release URL github.com/antst/sessionbus-peers -> github.com/sessionbus/opencode-kilo only (if a canonical URL is repointed)",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "opencode/README.md"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "opencode/README.md"
+      }
+    },
+    {
+      "path": "opencode/package-lock.json",
+      "sha256": "a9dd67cb31a56dc549e43309a28052a54855835d628a2985d28e57312a9f9f39",
+      "git_blob": "a518a2e68c1ae61853483f82149694a0d7771368",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "opencode/package-lock.json"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "opencode/package-lock.json"
+      }
+    },
+    {
+      "path": "opencode/package.json",
+      "sha256": "e9a1791ff87baefe94f2bc3644e32947dda0b9418a04c72543eab8ea18ead71c",
+      "git_blob": "86df1e0909567d0ee88dec32332de472255a7470",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "canonical repository/release URL github.com/antst/sessionbus-peers -> github.com/sessionbus/opencode-kilo only (if a canonical URL is repointed)",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "opencode/package.json"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "opencode/package.json"
+      }
+    },
+    {
+      "path": "scripts/cleanup-legacy/inventory.go",
+      "sha256": "df9433da5b355b42e5d407966e85803c87b25a7d5ba40d61d914b77a9a1837d6",
+      "git_blob": "f8fe397225380ac03bd62ac8eb7443fe94218e83",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "scripts/cleanup-legacy/inventory.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "scripts/cleanup-legacy/inventory.go"
+      }
+    },
+    {
+      "path": "scripts/cleanup-legacy/main.go",
+      "sha256": "b427e8052bac1eeb3c1e9513746ee8ad7d0e1754fd8c25d8b6f1405de2ee4788",
+      "git_blob": "4525700fe2281a6b3e7526fba5dafa368dc391d6",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "scripts/cleanup-legacy/main.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "scripts/cleanup-legacy/main.go"
+      }
+    },
+    {
+      "path": "scripts/cleanup-legacy/main_test.go",
+      "sha256": "4bae5028687ea87ef06dd8288ea4e31316d3c4ace7cf04ef971823e27e02d32a",
+      "git_blob": "c1c1a288144be064669efd383652f2d23d0ea762",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [
+        "TestQuarantinePreservesCurrentAliasAndLegacyTarget",
+        "TestConfigEditPreservesSymlinkConcurrentNativeChangesAndBackup",
+        "TestRejectIndirectParentAndReplacedAlias",
+        "TestNativeMCPRemovalIsOwnershipCheckedAndExact",
+        "TestGrokCleanupUsesNativeInstalledRepository"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "scripts/cleanup-legacy/main_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "scripts/cleanup-legacy/main_test.go"
+      }
+    },
+    {
+      "path": "scripts/cleanup-legacy/review_boundary_test.go",
+      "sha256": "3b3f0a71481b1915ad2bc8529c9db8652791b14a745db47493d3830fdcca1151",
+      "git_blob": "ad687776e75ef199197a29554a82532bdfb3594d",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [
+        "TestReviewNativeRemovalRejectsConfigOutsideHome",
+        "TestReviewClaudeMixedScopesRefuseBeforePlan",
+        "TestReviewServiceOwnershipRequiresExecutableNotComment"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "scripts/cleanup-legacy/review_boundary_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "scripts/cleanup-legacy/review_boundary_test.go"
+      }
+    },
+    {
+      "path": "scripts/install-kilo.sh",
+      "sha256": "31a0e43c18fab93fb3af97632f8fe93594932c7fc105d9dce11cec8c18a0294a",
+      "git_blob": "d108370d7a356d64897f1dcc587be8f230f2e22f",
+      "mode": "100755",
+      "class": "opencode-kilo-product",
+      "permitted_change": "canonical repository/release URL github.com/antst/sessionbus-peers -> github.com/sessionbus/opencode-kilo only (if a canonical URL is repointed)",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "scripts/install-kilo.sh"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "scripts/install-kilo.sh"
+      }
+    },
+    {
+      "path": "scripts/install-opencode.sh",
+      "sha256": "27c2d6393ad2041dfbb5c8244d781f0e1ce373ba9f7f89aafe3f916b80a7cce8",
+      "git_blob": "64cf49289c72cc96c79d15e7c30a567e4086c0d5",
+      "mode": "100755",
+      "class": "opencode-kilo-product",
+      "permitted_change": "canonical repository/release URL github.com/antst/sessionbus-peers -> github.com/sessionbus/opencode-kilo only (if a canonical URL is repointed)",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "scripts/install-opencode.sh"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "scripts/install-opencode.sh"
+      }
+    },
+    {
+      "path": "scripts/package-product",
+      "sha256": "d1e707cc7dc2be7018c06eea09cc2cb32da4fba461c6011977d24b5fcc892afc",
+      "git_blob": "88c0009b99e1be2068766db4eb7130494887ac27",
+      "mode": "100755",
+      "class": "shared-product-surface",
+      "permitted_change": "non-OpenCode/Kilo product branches removed; opencode/kilo npm staging branch, archive members and peer alias handling byte-identical",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "scripts/package-product"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "scripts/package-product"
+      }
+    },
+    {
+      "path": "scripts/release/install-product",
+      "sha256": "036bc6fb761bb8c09030a4a45f5f2b36d24875515278daeca2295361fb6f63c3",
+      "git_blob": "e3bb2ac78602443d12ab8f491123c2d29c785b04",
+      "mode": "100755",
+      "class": "shared-product-surface",
+      "permitted_change": "non-OpenCode/Kilo ROLE case arms removed; opencode and kilo arms and shared preamble byte-identical",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "scripts/release/install-product"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "scripts/release/install-product"
+      }
+    },
+    {
+      "path": "scripts/test-native-plugin",
+      "sha256": "e363e843cd8406f4cac22285748d571ba55d460aa6023fcf60660da02a84803c",
+      "git_blob": "88a9dd2f29491ac22620395647ca78c458b31b79",
+      "mode": "100755",
+      "class": "shared-product-surface",
+      "permitted_change": "byte-identical (invoked by both native package.json test scripts)",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "scripts/test-native-plugin"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "scripts/test-native-plugin"
+      }
+    },
+    {
+      "path": "wrappers/host/endpoint.go",
+      "sha256": "dada1a15bdf425e18e844d67e609b446d22622d5ca7c81b24aeb23a9a2fca832",
+      "git_blob": "41c9766efc10dbfabf3719c8082c08539d746aa1",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/endpoint.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/endpoint.go"
+      }
+    },
+    {
+      "path": "wrappers/host/endpoint_test.go",
+      "sha256": "9ec9fe16cc432a6e2feda44a65dcf7086fd58117afc84fae4e7e7f26cffa2a9e",
+      "git_blob": "299f437249ad46a867d8419a001acac6ae238a45",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [
+        "TestPrivateEndpointBridgeCancel",
+        "TestPrivateEndpointReplacesStalePath"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/endpoint_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/endpoint_test.go"
+      }
+    },
+    {
+      "path": "wrappers/host/handoff.go",
+      "sha256": "8385aa6586d3c66a21220ea360e94b51191a9c221e217a929fe9628155026a92",
+      "git_blob": "56218b2864778817c2ff2b060e8f2c85c72bf103",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/handoff.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/handoff.go"
+      }
+    },
+    {
+      "path": "wrappers/host/handoff_test.go",
+      "sha256": "eb32e0ecab777c3dba61957283bc2682f69d59c73b39f1f0f2377761d404a183",
+      "git_blob": "e24850651da06964cd368d646985a1d79122ab0d",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [
+        "TestHandoffDeliveryAndQueueCommit",
+        "TestHandoffFailedCreationKeepsFullQueue",
+        "TestHandoffFailedCreationRestoresPendingDelivery",
+        "TestHandoffFailedCreationPreservesAdmissionOrder",
+        "TestHandoffClaimAndFinish",
+        "TestHandoffClaimableDeliveryReportsQueuedAcrossTerminal",
+        "TestHandoffSDKInterruptCrossings"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/handoff_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/handoff_test.go"
+      }
+    },
+    {
+      "path": "wrappers/host/launch.go",
+      "sha256": "02c82ac348716cab696449539804c754e0b082302f6c652bcd54cfdb3161c8f9",
+      "git_blob": "0a1566c99ac1b5ec2c8822e63783d085e505f1da",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/launch.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/launch.go"
+      }
+    },
+    {
+      "path": "wrappers/host/launch_test.go",
+      "sha256": "266be8c8599bab982a46a69652f46e1433558ba89b966db1f25bdeac8700dff4",
+      "git_blob": "0f2e983a3ba59bb3971dd1807ff546b54940b915",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [
+        "TestLaneModeUsesTokenPresence",
+        "TestLaunchTokenDigestLength",
+        "TestInteractivePlan",
+        "TestInteractivePlanErrors",
+        "TestClassifiedInteractivePlanDefersProjectionErrors",
+        "TestBuildArgumentsTable",
+        "TestChildOwnershipTable",
+        "TestOwnedChildHelper",
+        "TestChildCloseIgnoresStoppedProcessNoise",
+        "TestChildOutputDrainsAfterExit"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/launch_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/launch_test.go"
+      }
+    },
+    {
+      "path": "wrappers/host/lock.go",
+      "sha256": "84159d31dc79d3a506d532e35cbe1cfdf99ea5e74784bacbff84221c6c0e5d12",
+      "git_blob": "9e31828c1ef4e02cd36d66a6f71705a035903fed",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/lock.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/lock.go"
+      }
+    },
+    {
+      "path": "wrappers/host/lock_test.go",
+      "sha256": "8a252811f328812037f66403e7735716f4806ac4ef420734127a93561dc30d97",
+      "git_blob": "1e2e1053c527451965954653bc8a0b563db81c5b",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [
+        "TestSessionLockStaleFileAndContention",
+        "TestSessionLockRenamePreservesClaim",
+        "TestSessionLockOrderlyCloseAllowsResume",
+        "TestSessionLockRenameRecoversCrashStaleTarget",
+        "TestSessionLockRenameRetriesInodeMismatch",
+        "TestSessionLockRenamePreservesRecreatedTarget",
+        "TestSessionLockRenameDoesNotReplaceHolder"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/lock_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/lock_test.go"
+      }
+    },
+    {
+      "path": "wrappers/host/not_running.go",
+      "sha256": "65dd0e7a37acec2da346627869309af268d6c5b68b5452a586d5bf1e240e9f5d",
+      "git_blob": "e62a0158d4f28d01f3c21183fe1e5022eb810482",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/not_running.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/not_running.go"
+      }
+    },
+    {
+      "path": "wrappers/host/render.go",
+      "sha256": "5825cf7f4f178393f1c424a647fe716a236df65484ff00456684f7c75110a4bf",
+      "git_blob": "df5de0b77e76d0c5b69395c486fb1779ec6ae3f5",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/render.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/render.go"
+      }
+    },
+    {
+      "path": "wrappers/host/render_test.go",
+      "sha256": "afe8e1a16480c62217049e42e209c1bd7f8bf7174b34232179bc994dcc637d22",
+      "git_blob": "cd8a200676d5eda8577d2cd7696928939218a2ea",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [
+        "TestRendererMatchesC5Fixture"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/render_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/render_test.go"
+      }
+    },
+    {
+      "path": "wrappers/host/testdata/native-message-envelope.json",
+      "sha256": "3b6fd04eb1d829f0e5313e350e624ebc27cd2e1e86286a68e395dd731e6d46bf",
+      "git_blob": "3b16a853d38d0aa45d874a038498b950000fb24b",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/testdata/native-message-envelope.json"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "host/testdata/native-message-envelope.json"
+      }
+    },
+    {
+      "path": "wrappers/kilo/arguments.go",
+      "sha256": "f1cfc7bd0ace077222911cb1cf400ba6ed81c93b68bcde4f9d0503b376d5976c",
+      "git_blob": "891b0c79596c4084bd316e797dc162455bedd696",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/kilo/arguments.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/kilo/arguments.go"
+      }
+    },
+    {
+      "path": "wrappers/kilo/arguments_test.go",
+      "sha256": "eddf1f251c8257fec61fdc42d2e79ce4c5b6ac2eb5613287ab2184fbe68b0ddf",
+      "git_blob": "b70ee02e958ade4de87206a1c24106126317879e",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestKiloManagedTopologyAndBothPureGrammars",
+        "TestKiloNativePassthroughAndValueArity",
+        "TestKiloResumeAliasAndNativeYoloBoundaries"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/kilo/arguments_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/kilo/arguments_test.go"
+      }
+    },
+    {
+      "path": "wrappers/kilo/install.go",
+      "sha256": "a8f9b8a68fd57e34289898e603334bd98d10bb69ac25bebe8e67dc4d85480dab",
+      "git_blob": "0086c64ae7723de2247812fe29edcec1e3a6fb06",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/kilo/install.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/kilo/install.go"
+      }
+    },
+    {
+      "path": "wrappers/kilo/install_test.go",
+      "sha256": "85882ec58c0dc60beb59b5a1c45871889e35b8f735d2fb68326f3c1b18b65f83",
+      "git_blob": "c0368fec01e72e94ebc72408fc0849603505d12c",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestKiloMaintenanceFacadeUsesNativeConfigAndNoRuntime"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/kilo/install_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/kilo/install_test.go"
+      }
+    },
+    {
+      "path": "wrappers/kilo/interactive_launch.go",
+      "sha256": "a6dd4288185bc6b2f50d031f373314d1801734b14c73780c3b070f6475899f9b",
+      "git_blob": "73ee8fa995bed19579e043b42aa5c17f436ce9f2",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/kilo/interactive_launch.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/kilo/interactive_launch.go"
+      }
+    },
+    {
+      "path": "wrappers/kilo/interactive_launch_test.go",
+      "sha256": "700a9e4e8b65253c882bee6e889fed30fe2cac74d49c79553747d5687d158a97",
+      "git_blob": "cfb1e505cae6e0e11d922ba22451b1bc94348806",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestCompiledKiloLauncherDirectLifetimeAndNativeResources"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/kilo/interactive_launch_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/kilo/interactive_launch_test.go"
+      }
+    },
+    {
+      "path": "wrappers/kilo/lane.go",
+      "sha256": "f6bf5fc9b91cda9ed509ebc9ff13aff018db8c824e6eb87e299d26a910f38353",
+      "git_blob": "ff51449a4fc1fce6f3e3d894d6893ff71143c25c",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/kilo/lane.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/kilo/lane.go"
+      }
+    },
+    {
+      "path": "wrappers/kilo/native_executable.go",
+      "sha256": "cd0261a189ee1410312b8bc5ba7a8722cbde4d50e331ef30275a324c0861c070",
+      "git_blob": "813f1b0bc78dcb2177019d421ed9dc4d398334ce",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/kilo/native_executable.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/kilo/native_executable.go"
+      }
+    },
+    {
+      "path": "wrappers/kilo/native_executable_test.go",
+      "sha256": "debf6727c265ca9be23ab1e9cd919f48dbe27f75a9bf27b94c942fe9a1eae569",
+      "git_blob": "36d2847b70ca13e5a648fb7bd1af3327839e3917",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestNativeResolverDirectOverrideAndResources",
+        "TestNativeResolverUsesOnlyNativeSelectedCache",
+        "TestNativeResolverBadOverrideDoesNotFallBack",
+        "TestNativeResolverBareOverrideResourceDirectoryMatchesShim",
+        "TestNativeResolverRejectsNonregularAndOversizedMetadata",
+        "TestNativeResolverRelativeAndSymlinkOverrideResources"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/kilo/native_executable_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/kilo/native_executable_test.go"
+      }
+    },
+    {
+      "path": "wrappers/kilo/testdata/interactive_native.go",
+      "sha256": "cbfd722fb52931d0e8c9d2fd72a42a53aa8965d5564762dfd78acb06eae26bd1",
+      "git_blob": "af752d6efec16c40c1e69eaaf27a06c1209c87ca",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/kilo/testdata/interactive_native.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/kilo/testdata/interactive_native.go"
+      }
+    },
+    {
+      "path": "wrappers/mcp/SESSIONBUS.md",
+      "sha256": "ff6fe51ed21e1350845bd111fc6686774e1529409c80da7eff43b0987ba621e9",
+      "git_blob": "58d04d81c5da4d51721b43db2170c5b6804cca5e",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/SESSIONBUS.md"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/SESSIONBUS.md"
+      }
+    },
+    {
+      "path": "wrappers/mcp/lane.go",
+      "sha256": "8b04b2461decde1b1ae0d82bdc2ec78f2f7565cbbcd958c3476bbb1f59a444f5",
+      "git_blob": "a8886f4611d8914928405c78f159be5a2bac2010",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/lane.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/lane.go"
+      }
+    },
+    {
+      "path": "wrappers/mcp/lane_test.go",
+      "sha256": "e7445ffaed03a51edd3e40439f70da2d407097f2b5af36c3542f57522298a139",
+      "git_blob": "66dc1f002f96ac1333adc06eb8474fa6bace6311",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [
+        "TestLaneBackendCrossingCallsAndErrors",
+        "TestLaneBackendRequiresSocket",
+        "TestPrivateActionKeepsCallerInResidentServer",
+        "TestPrivateActionPreservesWorkerCollectionError",
+        "TestServeLaneJoinsAdmittedActions"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/lane_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/lane_test.go"
+      }
+    },
+    {
+      "path": "wrappers/mcp/self_info_test.go",
+      "sha256": "1d74e4cc9cacd08dc3423cb8b8a1164159c2fd38cb6402421f31617ab15d7e06",
+      "git_blob": "073130230403e5ba252163908967176ac1eee19a",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [
+        "TestListSelfInfoSurvivesCallerAndNativeToolResponse"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/self_info_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/self_info_test.go"
+      }
+    },
+    {
+      "path": "wrappers/mcp/send_test.go",
+      "sha256": "fc02016425eb1383b3d084f83f9edbca5e226c4448ff52de2ccb6bc68725177c",
+      "git_blob": "60802795e39d7ab9c8e583307549e90a9fa0b94d",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [
+        "TestSendRejectsUnknownSummaryBeforeDispatch",
+        "TestAdvertisedArgumentsMatchPublicActionFieldUnion"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/send_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/send_test.go"
+      }
+    },
+    {
+      "path": "wrappers/mcp/server.go",
+      "sha256": "edf6a6e468b1be8296f285a0dac29bfb8c753792b76f90397bb0602267e264d3",
+      "git_blob": "f0ed6b8c6e849a20c599963c4943eb407c1df88e",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/server.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/server.go"
+      }
+    },
+    {
+      "path": "wrappers/mcp/server_test.go",
+      "sha256": "21b0d44c7d38cc8c26fda0073524b84426a8ecc2ea3ad5a52dcc8e4c484cfa0c",
+      "git_blob": "d3e17072971e004f26405fb06927b1e4f23a4993",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [
+        "TestServerMethods",
+        "TestInvalidRequests",
+        "TestToolArgumentsMustBeObject",
+        "TestServerUsesBackendCallerAfterPrepare",
+        "TestServerUsesStatelessActionBackend",
+        "TestServerReturnsOutputFailure",
+        "TestServerCancelWithStoppedOutput"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/server_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/server_test.go"
+      }
+    },
+    {
+      "path": "wrappers/mcp/sessionbus.go",
+      "sha256": "f7fe0a847a5fb58b005c61c86d97f83010866b11d407b458421ce63605c49cb7",
+      "git_blob": "926ed7bdd5f377158fcf6292b8f95fe1ff46203d",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/sessionbus.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/sessionbus.go"
+      }
+    },
+    {
+      "path": "wrappers/mcp/sessionbus_bounds_test.go",
+      "sha256": "e59d02ed325197568fa9c9daa7c1f72b197b69b1b7074000f9ba8b577c2402c5",
+      "git_blob": "3fba5851239e464f4b47f33d97f936f969cf7492",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [
+        "TestMCPBlockedResponsesDoNotHoldEOF",
+        "TestMCPBlockedOSPipeWriteJoinsOnEOF",
+        "TestMCPInitializedOnlyAfterSuccessfulWrite",
+        "TestMCPResponseWorkAndRetainedInputLimits",
+        "TestMCPReturnedPayloadBudgetStopsBlockedResponses",
+        "TestMCPFrameAndEscapedResultBounds",
+        "TestMCPCompletedActionDoesNotWriteAfterEOF",
+        "TestMCPResponseReservationsReleaseAndIDsCanBeReused",
+        "TestMCPOversizedPayloadStopsWithoutOutput",
+        "TestMCPCancelledCallsReleaseWorkWithoutReplies"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/sessionbus_bounds_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/sessionbus_bounds_test.go"
+      }
+    },
+    {
+      "path": "wrappers/mcp/sessionbus_test.go",
+      "sha256": "411caa0d710203944f75bd83002f11a36f929333beb854e5bbc4ae4fb9ac62ed",
+      "git_blob": "2286a88aed2a5952ce07ba65174d990aae401819",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [
+        "TestSessionbusNativeReportsAreExplicitAndHidden",
+        "TestSessionbusReportCannotShadowPublicTool",
+        "TestSessionbusMetadataIsPerNativeRequest",
+        "TestInactiveMCPStaysUntilEOFAndAdvertisesNothing"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/sessionbus_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/sessionbus_test.go"
+      }
+    },
+    {
+      "path": "wrappers/mcp/sessionbus_tools.go",
+      "sha256": "7c553b1ad6f8abf3c3da72417d1bf771b98cc31614cbe96aa2b9564da27f5924",
+      "git_blob": "2113cf19522f661bfec41f9e578ac23772455cd6",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/sessionbus_tools.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/sessionbus_tools.go"
+      }
+    },
+    {
+      "path": "wrappers/mcp/trace_policy_test.go",
+      "sha256": "98f71c86987892c98f4dcdb02fd2c4cc1cf96f024b60328ac342281334f30875",
+      "git_blob": "c34073b1d148cc08d6cfd69758784dfd9cca6ec8",
+      "mode": "100644",
+      "class": "peer-common",
+      "permitted_change": "exact peer-common copy; Go import relocation and gofmt only",
+      "test_functions": [
+        "TestSpawnResultTraceSurvivesSDKAndMCP"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/trace_policy_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/peer-common",
+        "commit": "eb655f686e4456a4c1121054763318e3d27e89b0",
+        "path": "mcp/trace_policy_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencode/arguments.go",
+      "sha256": "ff5b79ee2a078c049c4b365ea2ff12674203bbe44eebd28d4069ca4e9548690d",
+      "git_blob": "49144bbd9061e32bf0fd77ded619bad10b937cbe",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/arguments.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/arguments.go"
+      }
+    },
+    {
+      "path": "wrappers/opencode/declaration_test.go",
+      "sha256": "6536df7b9f8f1cfded9ce1b091c81b673ba1b117c6e367fb47496bdecba239a4",
+      "git_blob": "aa26b5498829622f083dd0dab1734c64aae27e1a",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestNativeDeclarationEqualsSharedTool"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/declaration_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/declaration_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencode/forward_test.go",
+      "sha256": "d349998d9f58f3070e86a95bd660e08cc83f50d6024d57123f8ade173fefd468",
+      "git_blob": "8e147b3ad9cccd583d386c4b219391757809e55a",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestNativeForwarderAgainstCommonEngine"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/forward_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/forward_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencode/install.go",
+      "sha256": "dd398343bdb447c0a57080f6b1142ed23cf55338ad0bca089a178212e8d5179e",
+      "git_blob": "90fc3d2c31099a2e594a625dd3d910caba652e88",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/install.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/install.go"
+      }
+    },
+    {
+      "path": "wrappers/opencode/interactive_launch.go",
+      "sha256": "1970b284ac4444230fcfb3072626c65fcf49910867f140e46a6ef201e0dd6d6a",
+      "git_blob": "335028bad908e701ebb8da6f014dd1ee445a0db7",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/interactive_launch.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/interactive_launch.go"
+      }
+    },
+    {
+      "path": "wrappers/opencode/interactive_launch_test.go",
+      "sha256": "9acfbfbfaf7e9baeb89147253f082a6792a5ec96ea61f43097a08d4ddfddc392",
+      "git_blob": "34884aff4469c34d1c51f571fbc1e9d26e9a3dd4",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestCompiledInteractiveLaunchOwnsChildAndResources"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/interactive_launch_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/interactive_launch_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencode/interactive_options.go",
+      "sha256": "6e3b9d92547e78195e4d5b3f0d11799e7d9925e003bb2e76d830d5e4f1f359c0",
+      "git_blob": "72279af902d1099b9e450216d4fe57be5818fc31",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/interactive_options.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/interactive_options.go"
+      }
+    },
+    {
+      "path": "wrappers/opencode/interactive_options_test.go",
+      "sha256": "bc474c8f99974cc2b674fa6532871b537a48330b74c6700b874e18a0eb51c5f7",
+      "git_blob": "a8b69b079c2dfb965fe831a9f709958ff0adf487",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestManagedNativeTopologyAndPure",
+        "TestManagedGroupsAndNativeSelectorPreservation",
+        "TestResumeAliasBecomesNativeSessionInPlace"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/interactive_options_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/interactive_options_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencode/opencode.go",
+      "sha256": "e2d20254ac37f0ec2784fcc791092cea86d81125aea448c1a6717fa4597eadee",
+      "git_blob": "c28cc37014db989428a1f1c854b72dc65c9704cf",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/opencode.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/opencode.go"
+      }
+    },
+    {
+      "path": "wrappers/opencode/opencode_test.go",
+      "sha256": "e8067423127527bfb14d411b9d8685e59c47065c889153fb7629c154f2d8e93a",
+      "git_blob": "904e7865975cc8e4f063a885e65bf3a45d3fced7",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestInteractiveArity"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/opencode_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/opencode_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencode/review_alias_test.go",
+      "sha256": "5e8bc62ad27d88092da5899abbb99ff725971fb6f0b5f3dfcc810bceb88a80f9",
+      "git_blob": "c22f862d000533b545af7ba7f3ec8ea5cc977e56",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestReviewResumeAliasDoesNotRewriteWrapperValues",
+        "TestReviewResumeAliasCannotConsumeTerminator"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/review_alias_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/review_alias_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencode/testdata/interactive_native.go",
+      "sha256": "43725956eccbc6afe1a32ebdc8a42fd0b963b556ea344c578c783f8420aaf2dd",
+      "git_blob": "1579f712c2180e463269a8d0fec63d54e66abfe5",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/testdata/interactive_native.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencode/testdata/interactive_native.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/client.go",
+      "sha256": "aff6423892bddfee32a4b927817045b781137e2b81f8ef7ea8c9f7b14dee9ace",
+      "git_blob": "7b10072958af63f968733110b0fe11304cddea04",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/client.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/client.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/http.go",
+      "sha256": "eb3b80d5e9ae46a9f638f6ed821c62d3695754b753a6203b462347addf89fdc7",
+      "git_blob": "a40ef5040616fb9f81ebe367e5237c629b47eb7b",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/http.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/http.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/http_test.go",
+      "sha256": "338ff4fa9ed33264996e75be3706f25143dac501c3499345315cffc0c5883175",
+      "git_blob": "b48c70e013b2e5dabe139bf8c37191e7ec200c4c",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestLaneHTTPWritePrecedesTerminalAndCancellationJoins",
+        "TestLaneHTTPPreCancelAndSizeDoNotSubmit",
+        "TestLaneHTTPFailedWriteNeverReportsWritten",
+        "TestLaneHTTPBoundsResponse",
+        "TestLaneHTTPHoldsWriteObservationEvenAfterNativeResponse",
+        "TestLaneHTTPControlCapacityAndCancellationRelease"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/http_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/http_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/install.go",
+      "sha256": "d02824b1b8829faa0083b0172bdb7b1de7576dedfe6164424c3e9f6bc72a5459",
+      "git_blob": "9b48f1961b81668cb42f5c33bfdf25b04e874cc1",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/install.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/install.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/install_commit.go",
+      "sha256": "11babca214dafdf741cf9d679c6195532b1fdc2628f8a5ffb453adff7fc5ab8a",
+      "git_blob": "6474ca6fe34d95faa9afe63ab2c1c36efedf19e6",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/install_commit.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/install_commit.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/install_entry.go",
+      "sha256": "6b2a78d0ccf1a69dd341bde93ab99cecaeee86bb4b38c09cbfb73c734c44510f",
+      "git_blob": "13b4836e4d0f5492086d5a492ae6e778f9925c4d",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/install_entry.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/install_entry.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/install_entry_test.go",
+      "sha256": "17bc638992355ae79de59a3264fd1312aadddfda41b1abc2c47b7ffe6631df00",
+      "git_blob": "b8cabd7dcbdbd895b67179a0377f2e373989c248",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestCompiledMaintenanceEntryNeedsNoNodeOrNativeRuntime",
+        "TestCompiledKiloMaintenanceEntryNeedsNoNodeOrNativeRuntime"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/install_entry_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/install_entry_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/install_jsonc.go",
+      "sha256": "894070cfa27b0e08ffb7d90e52d87965f13b8892057dcd353da0f3b8b2e45c56",
+      "git_blob": "1363b27931a31a918612e00761b7c06e793ef85b",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/install_jsonc.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/install_jsonc.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/install_kilo.go",
+      "sha256": "a22679dc6214f8a4e8ed2108d5924cd10751f09e36b617704b22d59a1d3f86aa",
+      "git_blob": "3c4d212bbcfe2fbee0e0626811a9aa88ca899e0b",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/install_kilo.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/install_kilo.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/install_kilo_test.go",
+      "sha256": "9c8badf4ce7b7ce378211f3b6bdb943ea294ef2e01d69f7617aba15ecaeed75e",
+      "git_blob": "7ce6edc6b334edd012eeafd5b7f6277ff90565b6",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestKiloInstallerReconcilesSevenDocumentsAndExactLegacy",
+        "TestKiloInstallerRefusesUnrecognizedOrRedirectedLegacyBeforeChanges",
+        "TestKiloInstallerLegacyRemovalRollsBackWithAllConfigChanges",
+        "TestKiloInstallerRechecksLegacyBeforeMutationAndRemoval",
+        "TestKiloInstallerValidatesSeventhDocumentBeforeLegacyRemoval",
+        "TestKiloInstallerRemovesLegacyWithoutCreatingConfig",
+        "TestKiloInstallerConfigAliasesAndOtherProductSpecifiers"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/install_kilo_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/install_kilo_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/install_skills.go",
+      "sha256": "ad678e08a4ede80844d6b2f24fd5e9250126b5a7c02fd3ab9414a6df65984fee",
+      "git_blob": "ded5de4cda8e736357e1fc2ea5f94625d85473e5",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/install_skills.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/install_skills.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/install_skills_test.go",
+      "sha256": "a319971e88ed3428d432659906119d5787964600ae3c325bee1f9f1de2cbb2a4",
+      "git_blob": "e648c814146419f028c14e66fe3e8cbcdd3f5e49",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestLocalBundledSkillRegisteredWithExactPluginAlreadyInstalled",
+        "TestLocalSkillUsesLastNativePathsArrayAndPreservesOtherLayers",
+        "TestSkillEmptyLaterArrayOverridesEarlierAndUnknownRootsRemain",
+        "TestSkillPreflightAndRollbackPreserveEveryDocument",
+        "TestLocalSkillRemovalTransitionAndMissingPayload",
+        "TestDesiredSkillTreeRejectsExtraOrRedirectedEntriesBeforeConfig",
+        "TestOwnedSkillPathsReconcileAllGlobalLayersWithoutOtherProduct"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/install_skills_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/install_skills_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/install_test.go",
+      "sha256": "d061f2c33e2aee8e6349491a85592fbaaae8000105b78d2d89302f0ffdc4a9da",
+      "git_blob": "fb1841e3f536b6951facf6714520fa24f7e497ce",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestConfigurePluginPreservesCommentsTuplesAndNativeLayers",
+        "TestConfigurePluginSpecifierFormsAndExactOwnership",
+        "TestConfigurePluginRejectsBeforeAnyMutation",
+        "TestConfigurePluginPartialCommitRestoresOriginalBytes",
+        "TestConfigurePluginBoundsAndRegularOpenedDescriptor",
+        "TestConfigurePluginPreservesConfigSymlinkAndRejectsConcurrentChange",
+        "TestConfigurePluginRejectsCrossGroupHardLinks"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/install_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/install_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/interactive_alias.go",
+      "sha256": "10d50588451846f2b3ab1a10ad7336a69e7ae37d6c9bb5cbdeed0384d1820982",
+      "git_blob": "d6a567ad4ad0de2103b9a6732ded5160c379eff2",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/interactive_alias.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/interactive_alias.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/interactive_launch.go",
+      "sha256": "f3f95393294fc6c593835746b97cc9cc57f32099524826b73967ed45e08c8078",
+      "git_blob": "7e3f4444319935ebfa162ec9089a9580ca4b91b0",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/interactive_launch.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/interactive_launch.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/interactive_options.go",
+      "sha256": "a9660f63efd4476b83e01c38487ad4a1902f6639f14aeed5ffd097e9e53e2635",
+      "git_blob": "6f85803a07db2effa4f4194d4e63e42ccc4a892d",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/interactive_options.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/interactive_options.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/kilo_close.go",
+      "sha256": "5f3c66d6698266caaf6fc932c1060ddcc0a414225c457304ccfd6f8ac89fd299",
+      "git_blob": "8bb87e7a1298c0ae8b662ec33ff061f1e4bebaa6",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/kilo_close.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/kilo_close.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/kilo_lane_test.go",
+      "sha256": "37ced02ba4dd7714968d4973c2b354cb7424ef15f3d5b621998535135b6db187",
+      "git_blob": "e0b7509842b42afc0d00835a9bc914c2c217974f",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestKiloLanePolicyAndNativeDefaults",
+        "TestKiloExplicitLaneBypassUsesNativeSessionPolicy",
+        "TestKiloNativeUnknownAndInterruptedIntermediateTerminals",
+        "TestKiloCloseJoinsNativeDisposalAndOnlyCallerCancellationForces",
+        "TestKiloNativeToolChildCapabilityAndMetadataSeparation",
+        "TestKiloUnattendedQuestionsAndPermissionsRejectWithoutPolicyChange",
+        "TestKiloUnexpectedEventLossRetiresAndJoinsNativeRun",
+        "TestKiloResumeAndRequestedForgetRemainNativeOperations",
+        "TestKiloLaneDeliveryDefersBeforeNativeSubmission"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/kilo_lane_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/kilo_lane_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/kilo_plan_test.go",
+      "sha256": "f9266aaf2df9a3df557af0d5a3ac090d65c9a7f4fdab8e57a2982aec92bb1eba",
+      "git_blob": "0c495d5174e6281df26430755832bd1bebbf3e85",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestKiloPlanHardStopUsesLatestNativeUserAndOriginalReturn",
+        "TestKiloPlanFollowupUsesCapturedNativeClientMode"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/kilo_plan_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/kilo_plan_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/lane.go",
+      "sha256": "d6a57005774eef6c51490a0efa54f6e9719e86d7f2581883b8cebbc2c6deb19f",
+      "git_blob": "1a440288da4bb02c406646910d1f76e9efffd0ed",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/lane.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/lane.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/lane_arguments.go",
+      "sha256": "4659d893badbe40681f99a9b4823fbdfe12728640ce4fe5a9b0598efc2c548a4",
+      "git_blob": "feab407d0f857987e4eddc88bae4dfd5e6b428d1",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/lane_arguments.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/lane_arguments.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/lane_arguments_test.go",
+      "sha256": "e25fdc9f650891934d8ea7b74d0b4b524265b60235b5f84366c3884b4b87cec2",
+      "git_blob": "45b127b516fb3a675b1aadbf6c65c7fda345964a",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestOpenArguments",
+        "TestNativeIDsFollowProductPrefixAndBusIdentityBounds"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/lane_arguments_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/lane_arguments_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/lane_endpoint.go",
+      "sha256": "1d13fa9c86cf222498eb566cf78bf7d6ea40560c12be7845702d2293a987cc6d",
+      "git_blob": "56e460aa1d9be8a483de3de0688c2f07d4bacefe",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/lane_endpoint.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/lane_endpoint.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/lane_endpoint_test.go",
+      "sha256": "d1aed9aaba01490dfe4f7c8328d381d2ff954f32c83e0e8d7236c933a949f181",
+      "git_blob": "013c9e579409c22d730d67e441e4572d1304a556",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestLaneEndpointInitializedConnectionLossPolicy"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/lane_endpoint_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/lane_endpoint_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/lane_test.go",
+      "sha256": "36b3c5d00023f2211b7da5c8d7bf6ef1534da913c6f5f47a478d804f470f0c0f",
+      "git_blob": "7c2332c40bdfad42f37b7ff76e152a8088ea46e3",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestMain",
+        "TestLegacyWorkerActiveDeliveryDefersBeforeNativeWrite",
+        "TestLegacyWorkerSeedWrittenAndRetainedCursor",
+        "TestLegacyWorkerCancelledSummaryIsNotUserCompletion",
+        "TestLegacyWorkerTerminalWhileSeedReportHeldAndBusLoss",
+        "TestLegacyResidentToolUsesNativeChildAncestry",
+        "TestLegacyWorkerEventLossJoinsHeldRunAndOwnedChild",
+        "TestLegacyWorkerRejectsNativePermissionAndQuestionWithoutGrant"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/lane_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/lane_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/materialization_test.go",
+      "sha256": "4cffc43cfc01077d8598e60acf2fdee6a613615d31d77bbb7ee57dca06ec7538",
+      "git_blob": "4a6001133a0763e3d408363953720b700c6dbbca",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestLegacyNativeLossAcrossResultMaterialization"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/materialization_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/materialization_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/message_id.go",
+      "sha256": "d30515b258047bbad73e929f814a2c779ef1b76b73cf0c21b71dbcbf2fe429be",
+      "git_blob": "fc574bccb0927e68dad22c12a8397f6ddad5a6a5",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/message_id.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/message_id.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/message_id_test.go",
+      "sha256": "e84441b7f4f5f159a9c9dedf66c788216ebf98f44d3a690f3983ba2cdf51c70d",
+      "git_blob": "5337e9b57a75291d31fbfb5f22998f094f24f390",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestKiloMessageIDsNativeShapeAndOwnOrder",
+        "TestKiloMessageIDsRejectClockAndEncodedWrapWithoutStateChange"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/message_id_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/message_id_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/native_cwd_test.go",
+      "sha256": "2f4d024bd90ff1b2f6b2fe5dd9837f472c0b467bbf4df75937d721f3b30f0c56",
+      "git_blob": "414fb67b9ee25a6029d8b071dbea71b06eedfa3b",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestNativeOpenThroughSymlinkDirectory"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/native_cwd_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/native_cwd_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/native_policy.go",
+      "sha256": "b8c1e88415f53f87eb7f845355b374d9476d742e24e7f000ca22f48f1aa13a34",
+      "git_blob": "1c0a4caaa436359f13891af6bc0faf05532dd8a5",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/native_policy.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/native_policy.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/native_summary.go",
+      "sha256": "112d6129675c212a62f1c70be37956c811a435c8aef9a22f1bdf80fd391ef71e",
+      "git_blob": "9d6ee6ab982e699585bcf38d5945c451f1ea5f8e",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/native_summary.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/native_summary.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/native_summary_test.go",
+      "sha256": "70eaff2acce4fd48073e3c9c6770b6d26a0cb8049cb6e194fbc61484c3152650",
+      "git_blob": "efa2e43aa4e96dddd2555f573777a30c9567ff8d",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestNativeMessageSummaryDiscriminatesRole",
+        "TestNativeSummaryEventDispatchAndValidation"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/native_summary_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/native_summary_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/open_lifetime_test.go",
+      "sha256": "a544bf11a73f23a4e70a6c9ccc50841fe0c5fadb30f9f39ef72183d424166a94",
+      "git_blob": "0b24e0b5b098d8a3b326a60a37a29947eca55f01",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestLegacyFailedOpenDeletesOnlyFreshAndReaps",
+        "TestKiloFailedOpenDeletesOnlyFreshAndReaps",
+        "TestLegacyOpenNeverFallsBackToPATH"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/open_lifetime_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/open_lifetime_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/package_test.go",
+      "sha256": "d28ba084ea13a9398e85d7943b8f61a0e5434778e51eced40bf075559ece4fb4",
+      "git_blob": "ebaf7a8ef593e4e031ebee1593a45eab3f7be4c6",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestLiteralArchiveInstallsTwiceWithoutNodeAndImportsNativeEntries",
+        "TestLiteralKiloArchiveInstallsTwiceWithoutNodeAndImportsNativeEntries",
+        "TestCrossArchiveRunsStagerOnBuildHost"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/package_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/package_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/activation.mjs",
+      "sha256": "c67816724ba155113cbbf4d0a52c28720eedd6d095034c6962b952f6a1579a25",
+      "git_blob": "3b86ad7a772c08223b71d6023030bfb216944abc",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/activation.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/activation.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/delivery.mjs",
+      "sha256": "df74b21344fd38609b7b8ed7ea5a5ce0679576611848b17970bb08f5f87a09fd",
+      "git_blob": "10ce132441c72981f5ce3e70678ebbfabaaf1d0f",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/delivery.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/delivery.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/delivery.test.mjs",
+      "sha256": "4b3828515546bc3dd77de7fe8f810508b672a5fadad470915691a24f5e6dfd8d",
+      "git_blob": "d505e0b5697b12d1eaa570ae87bdd62b24dab749",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [
+        "busy stage uses native idle event then one explicit native-session submission",
+        "attempted uncertain native handoff is never restored or retried",
+        "known pre-submit refusal preserves already receipted unsent input",
+        "per-owner FIFO count and byte limits reject without evicting prior input",
+        "owned cancellation joins an attempted native handoff without replay",
+        "native delivery matches the retained shared message envelope",
+        "queued receipt survives later sender cancellation until native idle"
+      ],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/delivery.test.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/delivery.test.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/endpoint.mjs",
+      "sha256": "2cec56fff7dbdc549a1d67341feee0b774c13d910af11e51a722cbf476765921",
+      "git_blob": "da1f45d24a2e25e3b4cec23e61069697015d695c",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/endpoint.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/endpoint.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/endpoint.test.mjs",
+      "sha256": "d4d877218fd6d5499410625f4a6443e5f6b1d262d6dac199588b1b41cf6414bb",
+      "git_blob": "6fa70d36e4fe3a753eba4e98fb4c8ea79175975c",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [
+        "actual resident endpoint routes simultaneous native identities and preserves escaped results",
+        "actual endpoint ",
+        "ninth resident connection rejected without retiring existing eight",
+        "global work budget spans resident connections",
+        "actual endpoint close settles writes when runtime omits callbacks"
+      ],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/endpoint.test.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/endpoint.test.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/forward-fixture.mjs",
+      "sha256": "d2a16e2c845e82e485c6e58f758fd0cb9e7edfef3bfbc3acd3854b968cf921ab",
+      "git_blob": "af0a876b5f7727768c2a59c761780d2a99fe3c50",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/forward-fixture.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/forward-fixture.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/forward.mjs",
+      "sha256": "a7e09bbf42569b9223eb484e81472591c4af5471762d67d0cf952fbc6f8104e1",
+      "git_blob": "77a076a33e9ae23e83359dd0e32f020048b03edf",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/forward.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/forward.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/forward.test.mjs",
+      "sha256": "abb8a9de68daa64b938a72559de72238ace2fc5c424dc81dd31aa452e13c0f35",
+      "git_blob": "53349548fbb2404abc09ee5907c8a2b429382a93",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [
+        "concurrent native contexts stay per call; cancellation needs no reply",
+        "expr:name + \" retires connection without reconnect\"",
+        "prewrite oversized call stays healthy and sends no request",
+        "disposal joins socket while native action has no response",
+        "native work capacity rejects admission and disposal settles all admitted calls",
+        "actual close settles writes when runtime omits callbacks; destroy alone does not"
+      ],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/forward.test.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/forward.test.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/gate.mjs",
+      "sha256": "35981d353b8b3599300b5f16be8933e81e6f4aaf6ce033c4df84917047702f7d",
+      "git_blob": "b27eb2cf39f53df3cf21263894035c569d6ab08d",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/gate.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/gate.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/owners.mjs",
+      "sha256": "77d0d15c2190e467aadf6edfac0d699c6cb7f8be537be836f1154a8389655aa0",
+      "git_blob": "aeb4706824450825807ba01b3892de9a323667b2",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/owners.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/owners.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/owners.test.mjs",
+      "sha256": "5ed6293c2f5186f54d15ee58df706b439200a2090dc6d881b9475797b2601bc4",
+      "git_blob": "7a9373989649b89fa28ffa0279b96f872c91979e",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [
+        "native tool can establish unselected exact child; only first route elects name",
+        "delayed native old-ID call remains old after route changes",
+        "deletion during held native GET forbids late owner resurrection",
+        "deletion during actual kit hello closes its owner before admission",
+        "native TUI disposal joins pending native GET, even if abort response is delayed",
+        "initial native status query completes before first hello",
+        "native blank title stays absent; same-ID title updates use rehello",
+        "pending identity bound rejects seventeenth owner without native call",
+        "invalid native title update retires old identity and joins without self-wait",
+        "retiring owner keeps capacity until held native delivery actually joins",
+        "actual endpoint native metadata survives held GET and ${boundary}",
+        "deletion during initial native rename cannot rehello late title",
+        "actual sole Caller preserves originating self_info with filtered rows",
+        "Kilo initial ${type} snapshot blocks despite empty TUI maps; terminal event drains once",
+        "Kilo another native session's pending question does not block the exact delivery owner",
+        "Kilo blocker arriving during held delivery GET preserves unsent input",
+        "Kilo final invocation recheck catches a blocker crossing the earlier live check",
+        "Kilo deletion cancels and joins held pending-request snapshots without submission",
+        "Kilo idle event during blocker snapshot cannot turn a stale snapshot into admission",
+        "Kilo native busy event during pending-request snapshots prevents handoff",
+        "Kilo unknown pending-request state fails closed (${JSON.stringify(bad)})"
+      ],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/owners.test.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/owners.test.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/peer.mjs",
+      "sha256": "49613237cc7f5363dab4ef89db8a1a044ed946a111d35fd11043c879e5bfd09e",
+      "git_blob": "1ec114da103f03e0a6ebae61e7358ca9655c2aeb",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/peer.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/peer.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/peer.test.mjs",
+      "sha256": "8ae54ffb300934d2fc8b69e007ee622ca6953e2983ae466e083520b6d1f6bf2d",
+      "git_blob": "01d9f62fbae29c75ef2156ae29cfce2175e37436",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [
+        "spawn and resume retain response trace through actual kit and native tool",
+        "actual kit admits native identity before sole Caller action",
+        "actual kit failed attempt is not admission; scheduled reconnect can admit",
+        "actual kit permanent hello refusal settles readiness without timer or EOF",
+        "deletion during held actual hello closes socket and cannot reappear",
+        "deletion cancels owned reconnect timer and late callback cannot reconnect",
+        "socket-close disposal cancels and joins held Caller work",
+        "reconnect gates new actions until the replacement hello is acknowledged"
+      ],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/peer.test.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/peer.test.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/profile.mjs",
+      "sha256": "10d325d4bca6d09f2e221dc3a4a635bb3a167f7fcf1b1b1b93498d6e4734e373",
+      "git_blob": "c482aa5716f4e1adbcbae5ac96f7a2da1aff8e07",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/profile.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/profile.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/readiness-fixture.mjs",
+      "sha256": "daadc8b6108cba8aea5e1612646752832cb3148bdc551b178c26c302501485b2",
+      "git_blob": "290fd5aafeb27a9a28fec4bd1acd48da6c8716a2",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/readiness-fixture.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/readiness-fixture.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/readiness.mjs",
+      "sha256": "d971f522464ed0c697c63c6c51d79d5de01709b2b2044cc1ceaa7204f5f1322f",
+      "git_blob": "e1000e5ce4b05d0b78dc598585cc8f785afdade9",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/readiness.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/readiness.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/readiness.test.mjs",
+      "sha256": "2dcebc596aa79330a4970474145bc2f08c83693dd03610f4d11712ef488b1f4c",
+      "git_blob": "da7a63202dec6efbcb24b21bba0fa4a156822d30",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [
+        "publication reaches multiple Workers after negative checks with filesystem events unavailable",
+        "a broadcast is only a wake; a missing marker remains pending and cancellation joins",
+        "empty ready marker ",
+        "disposal cancels missing-marker wait and closes subscription",
+        "reject "
+      ],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/readiness.test.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/readiness.test.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/review-delivery-idle.test.mjs",
+      "sha256": "c4ae389086ee55131bb75218888345ff3d16bebbab10cb8809af5894cbe8e30e",
+      "git_blob": "0aa7c6f28a8adf75518e12c93c1c70021f93ad89",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [
+        "native idle arriving during status await remains a drain trigger"
+      ],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/review-delivery-idle.test.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/review-delivery-idle.test.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/review-delivery-receipt.test.mjs",
+      "sha256": "9f6bb72127bafae3d415a8fc631cd84fb6e89f6123e4c88727116b31df0d312b",
+      "git_blob": "7f0f63059f93e0dd53515305a7c8c1690e110f75",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [
+        "later FIFO failure does not rewrite an already written receipt"
+      ],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/review-delivery-receipt.test.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/review-delivery-receipt.test.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/server.mjs",
+      "sha256": "7d7ef513ebf228999a1352fb5297b8b79214d4b025eb4f88deb291320d963419",
+      "git_blob": "99bcc13aa950807ac6ccfe13ab034bab97fd3b43",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/server.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/server.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/server.test.mjs",
+      "sha256": "3d7e397622ca2340b78a8077a9d9bfd59e3f76f85e6defe067b7d6b842918469",
+      "git_blob": "70e569149c0932e3b18dcbdbbd8ccb22ae9d4be5",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [
+        "ordinary and inherited foreign-parent launches return no tool or owner",
+        "constructor returns before TUI readiness and native call metadata crosses resident endpoint",
+        "cancelled startup calls release capacity; disposal joins missing-ready subscription",
+        "empty TUI claim admits exactly one overlapping owner and never transfers after failure",
+        "managed Kilo shell projection overrides inherited topology without changing native auth"
+      ],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/server.test.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/server.test.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/sessionbus-tool.json",
+      "sha256": "bfe5acd1aa93734e66dbe6c79f58a4f2bd7779908103a017cf11c23266e55823",
+      "git_blob": "4f1631a60dfdcec947f8f6e05bcc78a43b59f8ac",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/sessionbus-tool.json"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/sessionbus-tool.json"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/skills/sessionbus/SKILL.md.tmpl",
+      "sha256": "709c6bd0b771005fc7f08346890e0e8758979b3bf639746881535645f930abbc",
+      "git_blob": "a355cc1bed88e03b9156beaa4158a05c9a256a79",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/skills/sessionbus/SKILL.md.tmpl"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/skills/sessionbus/SKILL.md.tmpl"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/tui.mjs",
+      "sha256": "ac38ec98ae0499a3ae87db0d36f467c495bf61b49165bdd46c41648c716041d6",
+      "git_blob": "5f2c8f8537f825db2aa8f1cf25709bceb45b3ca2",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/tui.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/tui.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/plugin/tui.test.mjs",
+      "sha256": "7f030934639dae47aaeb91073e7cb26024d7ccf67e63d703c1d570718ff8eee9",
+      "git_blob": "79ab628d9ef6ae3313af193a8dfc55b0071a1948",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [
+        "ordinary TUI is inert before loading host reactivity or creating resources",
+        "managed home has endpoint but no fake session; actual tool and route own exact IDs",
+        "overlapping TUI initialization cannot transfer a claimed launch"
+      ],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/tui.test.mjs"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/plugin/tui.test.mjs"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/readiness_test.go",
+      "sha256": "4b9a94d7502fd18be8525a34ecb64dfc9574bde57f7651d59a2dbfe0a6513fd1",
+      "git_blob": "10bcb35f030c05bb15fbf73579257904a0f7aae0",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestLegacyToolReadinessRequiresExactInventory",
+        "TestLegacyDeleteRequiresTrueJSONConfirmation",
+        "TestLegacyWorkerExplicitForgetAcceptsNativeJSON",
+        "TestLegacyOpenNativeRepliesAndResumeOrder"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/readiness_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/readiness_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/result_test.go",
+      "sha256": "0022bb00f5972d0b2f56cf24670cdaa0970d7e5666d3137bccdcb41e4ef26068",
+      "git_blob": "7bc6c3339029ea7711769501777a9a9d69089d06",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestLegacyHistoryCompactionAndPagingStopsAtNativeFinal",
+        "TestLegacyHistoryRejectsPriorMissingRepeatedAndOversized",
+        "TestLegacyHistoryRejectsParentOutsideOwnedRange"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/result_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/result_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/review_install_test.go",
+      "sha256": "ed16aed8e5651ba371f667414feb7c5ed0c61a86fb794f105b79ebabbacaaf0a",
+      "git_blob": "5ae9cef3059dae687ea3ab58ba99673726624a8a",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestReviewInstallerRejectsHardLinkedNativeConfigs"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/review_install_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/review_install_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/review_open_test.go",
+      "sha256": "e4ac952a9c3cd1869871505ba454398dea8aaa670d9457c768058065709ee953",
+      "git_blob": "3947960a33693805cf9df7349f9bde87d9db8c59",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestReviewCancelledFailedOpenBreaksHeldRollback",
+        "TestKiloCancelledFailedOpenBreaksHeldRollback"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/review_open_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/review_open_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/review_plan_stop_test.go",
+      "sha256": "ab2cefb992d10892e2fef647c3f6a41ce3e32c4feca26a6be0e7ca4b8ae8ab96",
+      "git_blob": "706ae59d040a648e46ae6359d6dddcf5289286e9",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestReviewKiloPlanFollowupReturnIsNotLost"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/review_plan_stop_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/review_plan_stop_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/review_result_test.go",
+      "sha256": "b3a032acd3eacab663cd5450cec7c2fa377ac5436abe94de2e6d4561a0531838",
+      "git_blob": "e69cd8635c5ba1db90e4f0cb86da5bcde17da074",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestReviewHistoryRequiresNativeUserParentInOwnedRange",
+        "TestReviewCancelledRunDoesNotCompleteAtToolCallStep",
+        "TestLegacyCancelUsesNativeCompletedUserStopPredicate"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/review_result_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/review_result_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/review_summary_test.go",
+      "sha256": "dfd64c753a8210eff01d1740da0af63908d73bf977ddb7b2eda690499ec859c3",
+      "git_blob": "3d146e3c476fc6bb0290fad6eb81d3314afb4553",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [
+        "TestReviewNativeObjectSummariesThroughWorker"
+      ],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/review_summary_test.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/review_summary_test.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/run.go",
+      "sha256": "c9c59e23527a2b35d6f30c279fbdbd4895ca3ac7fd0810eaee735f996c52ad92",
+      "git_blob": "16154a4dedd0074d380e6a92d92403277caf00f2",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "Go module import relocation and gofmt import ordering only",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/run.go"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/run.go"
+      }
+    },
+    {
+      "path": "wrappers/opencodefamily/testdata/kilo-legacy-agent-sessions.txt",
+      "sha256": "7c9fefae063f4ead326dfc5db6c0a8bb1a8bd3d09a842a9e287749eaf2eeb8ed",
+      "git_blob": "42e1652898c38b77463996a4a1c515e2a7a09eb3",
+      "mode": "100644",
+      "class": "opencode-kilo-product",
+      "permitted_change": "byte-identical, except deletion-induced relative links repointed to immutable baseline source",
+      "test_functions": [],
+      "js_tests": [],
+      "proposed_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/testdata/kilo-legacy-agent-sessions.txt"
+      },
+      "current_location": {
+        "repository": "sessionbus/opencode-kilo",
+        "path": "wrappers/opencodefamily/testdata/kilo-legacy-agent-sessions.txt"
+      }
+    }
+  ],
+  "destination_repository": "sessionbus/opencode-kilo"
+}

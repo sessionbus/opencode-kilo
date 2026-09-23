@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/antst/sessionbus-peers/internal/testsocket"
 	kit "github.com/antst/sessionbus/bus/sdk/go"
+	"github.com/sessionbus/peer-common/testsocket"
 )
 
 func TestNativeOpenThroughSymlinkDirectory(t *testing.T) {

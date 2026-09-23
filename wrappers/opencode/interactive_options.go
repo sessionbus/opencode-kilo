@@ -2,7 +2,7 @@
 
 package opencode
 
-import "github.com/antst/sessionbus-peers/wrappers/opencodefamily"
+import "github.com/sessionbus/opencode-kilo/wrappers/opencodefamily"
 
 func validateManagedTopology(arguments, environment []string) error {
 	return opencodefamily.ValidateOpenCodeTopology(arguments, environment)

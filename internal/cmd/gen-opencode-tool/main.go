@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/antst/sessionbus-peers/wrappers/mcp"
+	"github.com/sessionbus/peer-common/mcp"
 )
 
 func main() {

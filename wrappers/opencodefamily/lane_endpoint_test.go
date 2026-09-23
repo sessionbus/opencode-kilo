@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/antst/sessionbus-peers/wrappers/mcp"
+	"github.com/sessionbus/peer-common/mcp"
 )
 
 type initializedToolObserver struct {

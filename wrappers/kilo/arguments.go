@@ -6,9 +6,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/antst/sessionbus-peers/wrappers/host"
-	"github.com/antst/sessionbus-peers/wrappers/opencodefamily"
 	sessionkit "github.com/antst/sessionbus/bus/sdk/go"
+	"github.com/sessionbus/opencode-kilo/wrappers/opencodefamily"
+	"github.com/sessionbus/peer-common/host"
 )
 
 var interactiveValueOptions = opencodefamily.KiloInteractiveValueOptions()

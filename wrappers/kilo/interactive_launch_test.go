@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/antst/sessionbus-peers/internal/testsocket"
-	"github.com/antst/sessionbus-peers/wrappers/opencodefamily"
+	"github.com/sessionbus/opencode-kilo/wrappers/opencodefamily"
+	"github.com/sessionbus/peer-common/testsocket"
 )
 
 func TestCompiledKiloLauncherDirectLifetimeAndNativeResources(t *testing.T) {

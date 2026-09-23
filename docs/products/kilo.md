@@ -12,7 +12,7 @@
 > interactive plugin keeps its bounded FIFO, answers active retention
 > immediately, and submits through the native TUI prompt controller at the next
 > idle witness. See
-> [the all-product boundary](../designs/mandatory-message-wake-20260921/NATIVE-BOUNDARIES.md).
+> [the all-product boundary](https://github.com/antst/sessionbus-peers/blob/710e5d33369cba4fb9468cd24fea0fe844a0219d/docs/designs/mandatory-message-wake-20260921/NATIVE-BOUNDARIES.md).
 
 ## Current source candidate
 

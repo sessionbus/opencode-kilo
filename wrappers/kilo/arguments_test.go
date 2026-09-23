@@ -3,8 +3,8 @@
 package kilo
 
 import (
-	"github.com/antst/sessionbus-peers/wrappers/host"
-	"github.com/antst/sessionbus-peers/wrappers/opencodefamily"
+	"github.com/sessionbus/opencode-kilo/wrappers/opencodefamily"
+	"github.com/sessionbus/peer-common/host"
 	"slices"
 	"strings"
 	"testing"

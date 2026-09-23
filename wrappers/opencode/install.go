@@ -2,7 +2,7 @@
 
 package opencode
 
-import "github.com/antst/sessionbus-peers/wrappers/opencodefamily"
+import "github.com/sessionbus/opencode-kilo/wrappers/opencodefamily"
 
 // InstallOptions describes the native global configuration reconciliation.
 type InstallOptions = opencodefamily.InstallOptions

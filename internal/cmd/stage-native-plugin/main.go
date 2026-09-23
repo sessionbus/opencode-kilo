@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/antst/sessionbus-peers/internal/pluginstage"
+	"github.com/sessionbus/opencode-kilo/internal/pluginstage"
 )
 
 func main() {

@@ -83,7 +83,7 @@ func Stage(repo, product, destination string, tests bool) error {
 				return err
 			}
 		}
-		if err := copyFile(filepath.Join(repo, "wrappers", "host", "testdata", "native-message-envelope.json"), "native-message-envelope.json"); err != nil {
+		if err := copyFile(filepath.Join(repo, "internal", "pluginstage", "testdata", "native-message-envelope.json"), "native-message-envelope.json"); err != nil {
 			return err
 		}
 	}

@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/antst/sessionbus-peers/wrappers/mcp"
+	"github.com/sessionbus/peer-common/mcp"
 )
 
 func TestNativeDeclarationEqualsSharedTool(t *testing.T) {
