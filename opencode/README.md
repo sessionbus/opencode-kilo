@@ -116,7 +116,7 @@ are outside these wrapper bounds. Kit ready reassignment is observed at its
 pinned reconnect scheduler boundary; a failed attempt is never hello admission.
 
 The rewrite's verified acceptance scopes and retained limitations are recorded in
-[the acceptance index](https://github.com/sessionbus/opencode-kilo/blob/develop/docs/designs/opencode-0.5.0/ACCEPTANCE.md). Historical
+[the acceptance index](../docs/designs/opencode-0.5.0/ACCEPTANCE.md). Historical
 product probes remain separately identified in the product facts.
 
 Local package installation (`--plugin-dir` or a validated `file:` package directory)
