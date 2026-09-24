@@ -37,11 +37,40 @@ an exact native Sessionbus reply, the requested native final and owned cleanup.
 The interactive cells used an initial prompt in native argv, with zero PTY
 writes; active cells retained their original live Bash witness at delivery.
 OCW923A and OCW923D remain separate first-failure launcher packets and are not
-counted as clean passes. Their subsequent harness corrections were tested by
+counted as passes. Their subsequent harness corrections were tested by
 fresh cells rather than rewriting those outcomes.
 
+Retrospective audit note (external packet
+`closed-inventory-retro-audit-opus-20260924` under
+`/home/antst/sessionbus-evidence`, including its `INDEPENDENT-VERIFICATION.md`
+and `ERRATA.md`; it extends the earlier `native-inventory-audit-dev1-20260923`
+audit, which counted only ordinary (non-synthetic) user rows and substantive
+finals): OCW923B, OCW923C, OCW923E and OCW923F are **qualified
+real-home functional wake/reply passes**, not unqualified clean or
+exclusive-input passes. The original driver and phase outcomes and the exact
+native Sessionbus reply, requested final and owned-cleanup observations stand;
+their evidence is immutable. Sole-new-model-input is **not established**: the
+test host's real-home OpenCode environment injected synthetic user rows from a
+host OpenCode skills-loader plugin (not retained; source inferred). The
+installed Sessionbus plugin files contain no such injection. S1,
+`<available-skills>` (4898 bytes, sha256
+`d21595bd5a5005895bd2c6c9d41a0be58e8b06af37d73ab39415105bccaa67dd`), followed
+setup in all four cells. S2, the skill-activation directive
+`<skill-evaluation-required>` (612 bytes, sha256
+`4f10ba4887b2e9e7588124ec9d8952505429c4a928286393811c3576a2f22e61`), followed
+the Sessionbus inbound inside the wake turn in OCW923B, OCW923C and OCW923F,
+not OCW923E; no additional tool call followed it. No product regression or
+merge rollback is inferred; no plugin change or clean-room rerun is planned,
+as the owner requires real-home testing. Future closed-inventory checks may
+use a predeclared, per-run reviewed environment profile for known plugin
+injections but must still disclose those inputs and keep the qualification.
+Unknown rows fail; no after-the-fact allowlist turns a past run into an
+exclusive-input proof.
+
 Kilo has two fresh **original-driver** passes on the installed build: KLW923A
-managed active and KLW923B managed idle. KLW923A explicitly selected the
+managed active and KLW923B managed idle. The retrospective audit does not
+affect them: it found exactly their setup and inbound inputs, with no
+injected rows. KLW923A explicitly selected the
 config-defined `sessionbus-wake-acceptance-20260922` agent, whose retained
 rules ask for other Bash commands and allow the exact `/usr/bin/sleep 45` used
 by the test. Its agent-provenance note was added retrospectively and does not
@@ -56,6 +85,6 @@ The cell packets are under
 above. Direct replies are retained as operator-attested raw Sessionbus
 notifications and joined to the native Sessionbus send results; they are not
 cryptographic receipts. The reviewed runner and launcher manifests precede
-the clean cells. These installed results make no tag, release, or version
-change. Binary-release and package-preview publishing remain disabled and
-held pending separate authorization.
+the six fresh cells named above. These installed results make no tag, release,
+or version change. Binary-release and package-preview publishing remain
+disabled and held pending separate authorization.
