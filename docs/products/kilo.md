@@ -14,13 +14,59 @@
 > idle witness. See
 > [the all-product boundary](https://github.com/antst/sessionbus-peers/blob/710e5d33369cba4fb9468cd24fea0fe844a0219d/docs/designs/mandatory-message-wake-20260921/NATIVE-BOUNDARIES.md).
 
-## Current source candidate
+## Current source and installed evidence
 
-The current source candidate targets native 7.6.2 and uses the shared Go/native
-plugin implementation documented in [the Kilo installation guide](../../kilo/README.md).
-Its controlled source tests do not constitute installed acceptance. The historical
-7.5.6 facts below remain provenance, not authority for the new transport or current
-host state. Installed metadata was 7.5.16 at the post-reboot read-only preflight.
+The current source targets native 7.6.2 and uses the shared Go/native plugin
+implementation documented in [the Kilo installation guide](../../kilo/README.md).
+Source tests, permanent installation, and each native behavior cell are separate
+claims. The permanent `a1177770` Kilo build (binary `959ccecf`) was installed
+and reinstalled in the real UMKA home; its install binding is `2e5bec9b` and its
+reviewed safe observation is `f4198f94`. The historical 7.5.6 facts below
+remain provenance, not authority for this installed version. The 7.5.16
+post-reboot preflight was earlier host evidence, not the current installation.
+
+Managed idle KLW923B (built-in `code` agent) and managed active KLW923A
+(custom agent) passed on this build. Kilo interactive idle KIW924E is an
+independently reviewed clean original PASS:
+one argv setup with zero PTY writes, one written inbound, one completed native
+Sessionbus send joined to the operator-attested direct reply, exact setup and
+wake finals, and owned cleanup. Its custom config-defined agent was
+`sessionbus-wake-acceptance-20260922`, with model
+`deepseek/deepseek-v4-pro`. KIW924E and KIW924D used this custom config-defined
+agent and model; they establish nothing about Kilo's default agent or default
+permission policy.
+The observed Kilo peer session model had no variant; the reviewed external
+acceptance-harness checker accepts that shape only for `kilo-peer-idle-*` and
+`kilo-peer-active-*` titles, while its lane checks still require `"default"`.
+Neither KIW924E's nor KIW924D's native snapshots persisted the Sessionbus tool
+part's pending/running states, only the completed part. Tolerance of that short
+transition is supported by native timestamps and offline tests, and is an
+inference from each successful watcher outcome.
+
+Interactive active KIW924D is an independently reviewed **clean original PASS**
+(live seal `8748b765`). Its single inbound was `queued_for_next_turn` while the
+owned `/usr/bin/sleep 45` remained live through the post-receipt witness. The
+native Sessionbus send joined to an operator-attested reply; its arrival was
+observed about 6.9 seconds after the native send ended (arrival operator-observed
+at 1-second resolution). It used the same custom
+agent and model as KIW924E, and its session model also had no `variant`.
+KIW924A and KIW924C remain original FAILs, independently classified as harness
+defects (A: absent-variant readiness check before inbound; C: pending-part
+watcher after inbound), not product failures. The corrected external watcher
+waits through pending and running, accepts completed only with the exact reply
+and final, and fails on error. The custom agent's config sets Bash `*` to ask
+and allows only the exact `/usr/bin/sleep 45`; KIW924D's sleep was auto-approved
+with `{source: agent}` by that test-specific agent-config rule, not by a manual
+approval or default policy.
+
+KIW924E's TUI displayed an `Update Available` notice for 7.8.1 before setup.
+The argv prompt proceeded and the dialog cleared without PTY input; the
+installed inventory stayed at 7.6.2. Nothing was installed; 7.6.2 remains
+provenance, not a version allowlist. A patch release could install silently
+unless autoupdate is disabled; the fresh and postflight inventory gates detect
+such drift. Any later installed-version drift
+requires a fresh binding, observation and native-source review before another
+one-use cell.
 
 ## Explicit lane bypass restoration
 

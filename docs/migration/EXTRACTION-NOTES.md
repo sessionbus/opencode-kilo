@@ -67,24 +67,68 @@ injections but must still disclose those inputs and keep the qualification.
 Unknown rows fail; no after-the-fact allowlist turns a past run into an
 exclusive-input proof.
 
-Kilo has two fresh **original-driver** passes on the installed build: KLW923A
-managed active and KLW923B managed idle. The retrospective audit does not
-affect them: it found exactly their setup and inbound inputs, with no
-injected rows. KLW923A explicitly selected the
+Kilo has two fresh **managed original-driver** passes on the installed build:
+KLW923A active and KLW923B idle. The retrospective audit does not affect them:
+it found exactly their setup and inbound inputs, with no injected rows.
+KLW923A explicitly selected the
 config-defined `sessionbus-wake-acceptance-20260922` agent, whose retained
 rules ask for other Bash commands and allow the exact `/usr/bin/sleep 45` used
 by the test. Its agent-provenance note was added retrospectively and does not
 change the original cell outcome. KLW923B explicitly selected the built-in
 `code` agent with `--agent code`; no Kilo configuration or permission edit was
-made for that idle test. Kilo interactive idle and active are **untested and
-held** because a Kilo-specific acceptance harness has not been reviewed. They
-are not recorded as product failures or as a native limitation.
+made for that idle test.
 
-The cell packets are under
-`/home/antst/sessionbus-evidence/opencode-kilo-live-dev1-20260923` by the IDs
-above. Direct replies are retained as operator-attested raw Sessionbus
+The external acceptance-harness watcher successor `9b0277fd` (independently
+reviewed CLEAR) fixes the KIW924C pending-part failure: pending and running
+remain not-yet, completed receives the exact reply/final checks, and error
+fails. KIW924A (before inbound) and KIW924C (after inbound) remain original
+FAILs, independently classified as harness defects (A: the readiness checker
+rejected the absent variant before inbound; C: the watcher rejected a pending
+tool part), not product failures. KIW924E interactive idle is an
+independently reviewed clean original PASS (live seal `42a34dc5`): native 7.6.2
+with the custom `sessionbus-wake-acceptance-20260922` agent and
+`deepseek/deepseek-v4-pro` model, one argv setup and zero PTY writes, a written
+inbound, one native Sessionbus send joined to the operator-attested reply,
+exact finals and owned cleanup. Its peer session model's variant was absent; the
+reviewed external acceptance-harness checker accepts that shape only for
+`kilo-peer-idle-*` and `kilo-peer-active-*` titles, while its lane checks still
+require `"default"`. Native snapshots did not persist the pending/running
+states; live tolerance of their short transition is inferred from native
+timestamps and the successful watcher outcome. The watcher's pending/running
+handling is tested offline. The TUI displayed a 7.8.1
+update notice before setup, but the argv prompt proceeded without input and the
+installed 7.6.2 inventory stayed unchanged.
+
+KIW924D interactive active is an independently reviewed **clean original PASS**
+(live seal `8748b765`). Its retained receipt is
+`queued_for_next_turn` while the exact owned Bash sleep remained live through
+the post-receipt witness. It used the same custom agent and model as KIW924E.
+Its session model also had no `variant`. The native Sessionbus send joined to
+the operator-attested reply; its arrival was observed about 6.9 seconds after
+the native send ended (arrival operator-observed at 1-second resolution),
+separately from the later file write.
+The custom agent's config sets Bash `*` to ask and allows only the exact
+`/usr/bin/sleep 45`; KIW924D's sleep was auto-approved with `{source: agent}`
+by that test-specific agent-config rule, not by a manual approval or default
+policy. The watcher's pending/running tolerance remains an inference from
+native timestamps and offline tests because those transient states were not
+persisted in the live native snapshot.
+Neither interactive cell establishes Kilo's default agent or default permission
+policy. Neither cell changes the managed results or removes OpenCode's qualifications. Installed
+versions are provenance, not an allowlist; any later drift stops a new cell for
+reviewed re-pinning rather than becoming a product failure.
+
+The managed cell packets are under
+`/home/antst/sessionbus-evidence/opencode-kilo-live-dev1-20260923`; the new
+interactive Kilo cells are under
+`/home/antst/sessionbus-evidence/kilo-interactive-live-dev2-20260924`.
+The independent active-cell verdict is retained there as
+`KIW924D-INDEPENDENT-RAW-REVIEW-opus.md`.
+Direct replies are retained as operator-attested raw Sessionbus
 notifications and joined to the native Sessionbus send results; they are not
 cryptographic receipts. The reviewed runner and launcher manifests precede
-the six fresh cells named above. These installed results make no tag, release,
+the six managed and OpenCode original-driver passes named above; each KIW924
+cell also recorded and verified its own runner manifest. These installed
+results make no tag, release,
 or version change. Binary-release and package-preview publishing remain
 disabled and held pending separate authorization.
