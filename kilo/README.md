@@ -73,6 +73,22 @@ blocker can cross the final check and native submission; the API supplies no
 atomic check-and-submit. `written` records successful native handoff/API acceptance, not proof
 of model consumption. There is no replay or restart recovery.
 
+On the installed 7.6.2 build, KIW924E is an independently reviewed clean
+original PASS for an interactive idle wake, with an operator-attested reply.
+Its peer session model omitted `variant`; the reviewed external acceptance-harness
+checker accepts that shape only for `kilo-peer-idle-*` and
+`kilo-peer-active-*` titles, while its lane checks still require `"default"`.
+KIW924D is an independently reviewed clean original PASS for a
+`queued_for_next_turn` active wake, with an operator-attested reply. Its
+session model also omitted `variant`. Its custom agent's config sets Bash `*`
+to ask and allows only the exact `/usr/bin/sleep 45`; the sleep was
+auto-approved with `{source: agent}` by that test-specific agent-config rule,
+not by a manual approval or default policy. These cells used
+the custom config-defined agent `sessionbus-wake-acceptance-20260922` and model
+`deepseek/deepseek-v4-pro`; they establish nothing about Kilo's default agent
+or default permission policy. See [the product facts](../docs/products/kilo.md)
+for the cell scope, earlier FAILs and the observed update notice.
+
 ## Lanes and lifetime
 
 Public spawn selects product `kilo-peer`. One Worker Caller owns lane capability;
