@@ -81,7 +81,7 @@ func (p *Wrapper) closeKilo(ctx context.Context, request kit.SessionCloseRequest
 	p.closeOnce.Do(func() {
 		p.mu.Lock()
 		p.closing = true
-		client, id, cancel, adopted := p.client, p.id, p.cancel, p.opened
+		cancel, adopted := p.cancel, p.opened
 		p.mu.Unlock()
 
 		// Only the supplied Close context authorizes escalation during a normal
@@ -94,9 +94,6 @@ func (p *Wrapper) closeKilo(ctx context.Context, request kit.SessionCloseRequest
 			}
 			close(escalated)
 		})
-		if request.Forget && client != nil && id != "" {
-			p.closeErr = client.remove(ctx, id)
-		}
 		p.stopKiloChild(!adopted)
 		if cancel != nil {
 			cancel(errors.New("Kilo owner closing"))
