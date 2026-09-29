@@ -22,6 +22,7 @@ type laneRun struct {
 	userSeen  bool
 	count     int
 	interrupt *nativeInterrupt
+	rejects   []*nativeInterrupt // wrapper permission rejections issued in this Run
 }
 type nativeInterrupt struct {
 	done chan struct{}
@@ -134,7 +135,7 @@ func (p *Wrapper) executeRun(ctx context.Context, run *kit.Run, input kit.RunInp
 	}
 	raw, err := op.wait()
 	p.mu.Lock()
-	interrupt := t.interrupt
+	interrupt, rejects := t.interrupt, t.rejects
 	p.mu.Unlock()
 	if interrupt != nil {
 		<-interrupt.done
@@ -142,6 +143,13 @@ func (p *Wrapper) executeRun(ctx context.Context, run *kit.Run, input kit.RunInp
 			p.fail(interrupt.err)
 			err = errors.Join(err, interrupt.err)
 		}
+	}
+	// Join the rejections issued before this terminal returned; a later one
+	// cannot have ended it. A failed rejection has already failed the owner.
+	rejected := false
+	for _, r := range rejects {
+		<-r.done
+		rejected = rejected || r.ack
 	}
 	if err != nil {
 		p.fail(err)
@@ -203,6 +211,11 @@ func (p *Wrapper) executeRun(ctx context.Context, run *kit.Run, input kit.RunInp
 		if !complete {
 			if interrupted {
 				return kit.TurnResult{Outcome: "interrupted"}, nil
+			}
+			// Native ends the loop after a denied tool call without a stop; the
+			// acknowledged wrapper rejection is that retained terminal.
+			if rejected {
+				return kit.TurnResult{Outcome: "failed", Result: p.kind.title() + " run ended by permission rejection"}, nil
 			}
 			return kit.TurnResult{}, errors.New("native terminal lacks completed assistant")
 		}
@@ -405,10 +418,20 @@ func (p *Wrapper) observe(raw []byte) error {
 	default:
 		return errors.New("native event work limit reached")
 	}
+	var rejection *nativeInterrupt
+	if e.Type == "permission.asked" && t != nil {
+		rejection = &nativeInterrupt{done: make(chan struct{})}
+		p.mu.Lock()
+		t.rejects = append(t.rejects, rejection)
+		p.mu.Unlock()
+	}
 	p.workers.Add(1)
 	go func() {
 		defer p.workers.Done()
 		defer func() { <-p.eventWork }()
+		if rejection != nil {
+			defer close(rejection.done)
+		}
 		if err := p.ownsSession(p.ctx, properties.SessionID); err != nil {
 			p.fail(err)
 			return
@@ -421,6 +444,8 @@ func (p *Wrapper) observe(raw []byte) error {
 		}
 		if _, err := p.client.call(p.ctx, "POST", path, body, 200); err != nil {
 			p.fail(err)
+		} else if rejection != nil {
+			rejection.ack = true
 		}
 	}()
 	return nil
