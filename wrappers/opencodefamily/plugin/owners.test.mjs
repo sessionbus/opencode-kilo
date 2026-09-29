@@ -411,14 +411,27 @@ test("OpenCode busy-queued input needs completion and a later idle, not the earl
   const f = await busyQueued(t, halted);
   await f.idle(); // No assistant event yet: the snapshot binds the incomplete assistant.
   assert.deepEqual(f.counts, { snapshots: 1, submissions: 0 });
-  await f.idle("busy"); await f.idle(); // A new busy observation drops that binding.
-  assert.deepEqual(f.counts, { snapshots: 2, submissions: 0 });
+  await f.idle("busy"); await f.idle(); // A repeated busy check stays in this generation.
+  assert.deepEqual(f.counts, { snapshots: 1, submissions: 0 });
   await f.update(completed); // Marks only; the old Runner is still installed.
   assert.equal(f.counts.submissions, 0);
   await f.idle(); // Runner.onIdle.
   assert.equal(f.counts.submissions, 1);
   await f.update(completed); await f.idle(); await f.owners.dispose();
-  assert.deepEqual(f.counts, { snapshots: 2, submissions: 1 }); assert.deepEqual(f.failures, []);
+  assert.deepEqual(f.counts, { snapshots: 1, submissions: 1 }); assert.deepEqual(f.failures, []);
+});
+
+test("OpenCode busy generation does not reuse a prior assistant witness", { skip: !nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
+  const prior = { ...completed, id: "msg_prior" };
+  const current = { ...halted, id: "msg_current" };
+  const f = await busyQueued(t, current, [prior]);
+  await f.idle();
+  assert.deepEqual(f.counts, { snapshots: 1, submissions: 0 });
+  const currentCompleted = { ...current, time: { created: 3, completed: 4 } };
+  await f.update(currentCompleted); await f.idle();
+  assert.equal(f.counts.submissions, 1);
+  await f.update(currentCompleted); await f.idle(); await f.owners.dispose();
+  assert.deepEqual(f.counts, { snapshots: 1, submissions: 1 }); assert.deepEqual(f.failures, []);
 });
 
 for (const order of ["before", "after"]) {
@@ -428,7 +441,7 @@ for (const order of ["before", "after"]) {
     assert.equal(f.counts.submissions, 0);
     await f.idle(); assert.equal(f.counts.submissions, 1);
     await f.update(completed); await f.idle(); await f.owners.dispose();
-    assert.deepEqual(f.counts, { snapshots: 0, submissions: 1 });
+    assert.deepEqual(f.counts, { snapshots: order === "before" ? 1 : 0, submissions: 1 });
   });
 }
 
@@ -438,6 +451,47 @@ test("OpenCode later user message does not make the early halt idle sufficient",
   await f.update(completed); assert.equal(f.counts.submissions, 0);
   await f.idle(); await f.owners.dispose();
   assert.deepEqual(f.counts, { snapshots: 0, submissions: 1 });
+});
+
+test("OpenCode repeated busy check preserves the current assistant witness", { skip: !nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
+  const f = await busyQueued(t, operator);
+  await f.update(halted);
+  await f.idle("busy"); await f.idle();
+  assert.deepEqual(f.counts, { snapshots: 0, submissions: 0 });
+  await f.update(completed); await f.idle();
+  assert.equal(f.counts.submissions, 1);
+  await f.update(completed); await f.idle(); await f.owners.dispose();
+  assert.deepEqual(f.counts, { snapshots: 0, submissions: 1 }); assert.deepEqual(f.failures, []);
+});
+
+test("OpenCode fallback snapshot rechecks an assistant observed while pending", { skip: !nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
+  const entered = deferred(), release = deferred();
+  let busy = true;
+  const counts = { snapshots: 0, submissions: 0 };
+  const f = await fixture(t, { status: async () => result(busy ? { ses_target: { type: "busy" } } : {}),
+    messages: async (params) => {
+      counts.snapshots++; assert.deepEqual(params, { sessionID: "ses_target", limit: 1 });
+      entered.resolve(); await release.promise;
+      return result([{ info: operator, parts: [] }]);
+    }, promptAsync: async () => { counts.submissions++; return result(undefined, 204); } });
+  await f.action("ses_target");
+  assert.equal((await f.wires.get("ses_target").call("message.deliver", inbound())).disposition, "queued_for_next_turn");
+
+  busy = false;
+  f.events.emit("session.status", { properties: { sessionID: "ses_target", status: { type: "idle" } } });
+  await entered.promise;
+  f.events.emit("message.updated", { properties: { sessionID: halted.sessionID, info: halted } });
+  release.resolve(); await nextTurn();
+  assert.deepEqual(counts, { snapshots: 1, submissions: 0 });
+
+  f.events.emit("message.updated", { properties: { sessionID: completed.sessionID, info: completed } });
+  await nextTurn(); assert.equal(counts.submissions, 0);
+  f.events.emit("session.status", { properties: { sessionID: "ses_target", status: { type: "idle" } } });
+  await nextTurn(); assert.equal(counts.submissions, 1);
+  f.events.emit("message.updated", { properties: { sessionID: completed.sessionID, info: completed } });
+  f.events.emit("session.status", { properties: { sessionID: "ses_target", status: { type: "idle" } } });
+  await nextTurn(); await f.owners.dispose();
+  assert.deepEqual(counts, { snapshots: 1, submissions: 1 }); assert.deepEqual(f.failures, []);
 });
 
 // Documented limitation: without an observed assistant, a user message or an
