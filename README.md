@@ -17,4 +17,4 @@ The bootstrap scripts verify the archive against `SHA256SUMS` before invoking th
 
 The **build and test environment does require Node 24 and npm** to assemble the existing native plugin and its pinned `@sessionbus/kit` 0.5.9 dependency. `scripts/package-product` runs the Go stager, `npm pack`, and `npm ci --omit=dev`. The installed plugin runs in the product's existing Bun runtime; no separate Node installation is added to the target. The source tests run with `go test ./...`, followed by `npm ci --ignore-scripts` and `npm test` in each of `opencode` and `kilo`.
 
-Release and preview-publish workflows are retained for review but must remain disabled in the destination repository until publication is authorized. No installed acceptance claim follows from this source extraction alone.
+Stable releases are published from signed `vX.Y.Z` tags; see [docs/releases](docs/releases). The stable tag must equal `RELEASE_VERSION`. The native plugin packages ship inside the archives and keep their own npm versions. No installed acceptance claim follows from this source extraction alone.
