@@ -266,11 +266,9 @@ func TestKiloUnexpectedEventLossRetiresAndJoinsNativeRun(t *testing.T) {
 func TestKiloResumeAndRequestedForgetRemainNativeOperations(t *testing.T) {
 	for _, forget := range []bool{false, true} {
 		t.Run(map[bool]string{false: "preserve history", true: "forget while live"}[forget], func(t *testing.T) {
-			expected := "0"
-			if forget {
-				expected = "1"
-			}
-			t.Setenv("KILO_TEST_EXPECT_DELETE", expected)
+			// forget never deletes product-owned native history for an existing/resumed
+			// lane; only the failed-fresh-open rollback path does that (see Open).
+			t.Setenv("KILO_TEST_EXPECT_DELETE", "0")
 			f := newWorkerRequestFixture(t, kiloNative, nil, "ses_native")
 			t.Cleanup(func() { f.p.stopKiloChild(true) })
 			raw, err := f.p.client.call(f.ctx, "GET", "/fixture/state", nil, 200)

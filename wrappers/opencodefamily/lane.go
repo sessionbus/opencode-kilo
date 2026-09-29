@@ -302,11 +302,8 @@ func (p *Wrapper) Close(ctx context.Context, request kit.SessionCloseRequest) er
 	p.closeOnce.Do(func() {
 		p.mu.Lock()
 		p.closing = true
-		client, id, cmd, cancel := p.client, p.id, p.command, p.cancel
+		cmd, cancel := p.command, p.cancel
 		p.mu.Unlock()
-		if request.Forget && client != nil && id != "" {
-			p.closeErr = client.remove(ctx, id)
-		}
 		if cancel != nil {
 			cancel(p.kind.err("owner closing"))
 		}

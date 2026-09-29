@@ -67,6 +67,25 @@ func TestLegacyWorkerExplicitForgetAcceptsNativeJSON(t *testing.T) {
 	}
 }
 
+// forget never deletes product-owned native history for an existing native
+// session; only the failed-fresh-open rollback path in Open does that.
+func TestOpenCodeCloseForgetNeverDeletesExistingNativeHistory(t *testing.T) {
+	for _, forget := range []bool{false, true} {
+		t.Run(map[bool]string{false: "ordinary", true: "forget"}[forget], func(t *testing.T) {
+			calls := 0
+			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++ }))
+			defer s.Close()
+			p := &Wrapper{client: newLaneHTTP(s.URL, "/work", "u", "p"), id: "ses_existing"}
+			if err := p.Close(context.Background(), kit.SessionCloseRequest{Forget: forget}); err != nil {
+				t.Fatalf("close: %v", err)
+			}
+			if calls != 0 {
+				t.Fatalf("forget=%v reached native HTTP %d time(s)", forget, calls)
+			}
+		})
+	}
+}
+
 func TestLegacyOpenNativeRepliesAndResumeOrder(t *testing.T) {
 	for _, tc := range []struct{ name, resume, permission, wrong string }{
 		{name: "fresh default"}, {name: "fresh explicit bypass", permission: "bypassPermissions"},
