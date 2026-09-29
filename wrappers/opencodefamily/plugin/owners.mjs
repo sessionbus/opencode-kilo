@@ -189,10 +189,11 @@ export class NativeOwners {
   // starts a new generation; idle-time input keeps the plain status path.
   async #terminalStatus(record, signal) {
     const status = await this.#status(record, signal);
-    if (status !== "idle") { record.terminal = {}; return status; }
+    if (status !== "idle") { record.terminal = { before: record.assistant }; return status; }
     const terminal = record.terminal;
     if (!terminal) return status;
-    if (record.assistant === undefined && terminal.assistant === undefined) {
+    const observed = record.assistant !== terminal.before ? record.assistant : undefined;
+    if (observed === undefined && terminal.assistant === undefined) {
       // No assistant event seen (owner attached mid-step): one bounded snapshot.
       // Only an incomplete assistant guarantees a later completion and idle. A
       // user message or completed assistant cannot be ordered against this
@@ -204,7 +205,7 @@ export class NativeOwners {
       const latest = messages.at(-1)?.info;
       terminal.assistant = latest?.role === "assistant" && typeof latest.time?.completed !== "number" ? latest.id : null;
     }
-    const assistant = record.assistant ?? terminal.assistant;
+    const assistant = observed ?? terminal.assistant;
     if (assistant !== null && record.settled !== assistant) return "busy";
     record.terminal = undefined;
     return record.status;

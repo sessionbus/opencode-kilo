@@ -421,6 +421,19 @@ test("OpenCode busy-queued input needs completion and a later idle, not the earl
   assert.deepEqual(f.counts, { snapshots: 2, submissions: 1 }); assert.deepEqual(f.failures, []);
 });
 
+test("OpenCode busy generation does not reuse a prior assistant witness", { skip: !nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
+  const prior = { ...completed, id: "msg_prior" };
+  const current = { ...halted, id: "msg_current" };
+  const f = await busyQueued(t, current, [prior]);
+  await f.idle();
+  assert.deepEqual(f.counts, { snapshots: 1, submissions: 0 });
+  const currentCompleted = { ...current, time: { created: 3, completed: 4 } };
+  await f.update(currentCompleted); await f.idle();
+  assert.equal(f.counts.submissions, 1);
+  await f.update(currentCompleted); await f.idle(); await f.owners.dispose();
+  assert.deepEqual(f.counts, { snapshots: 1, submissions: 1 }); assert.deepEqual(f.failures, []);
+});
+
 for (const order of ["before", "after"]) {
   test(`OpenCode normal turn end hands off on its single idle (completion ${order} enqueue)`, { skip: !nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
     const f = await busyQueued(t, halted, order === "before" ? [completed] : []);
@@ -428,16 +441,16 @@ for (const order of ["before", "after"]) {
     assert.equal(f.counts.submissions, 0);
     await f.idle(); assert.equal(f.counts.submissions, 1);
     await f.update(completed); await f.idle(); await f.owners.dispose();
-    assert.deepEqual(f.counts, { snapshots: 0, submissions: 1 });
+    assert.deepEqual(f.counts, { snapshots: order === "before" ? 1 : 0, submissions: 1 });
   });
 }
 
-test("OpenCode later user message does not make the early halt idle sufficient", { skip: !nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
+test("OpenCode current-generation snapshot preserves the documented later-user fallback", { skip: !nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
   const f = await busyQueued(t, operator, [halted]);
-  await f.idle(); assert.equal(f.counts.submissions, 0);
-  await f.update(completed); assert.equal(f.counts.submissions, 0);
+  await f.idle(); assert.deepEqual(f.counts, { snapshots: 1, submissions: 1 });
+  await f.update(completed);
   await f.idle(); await f.owners.dispose();
-  assert.deepEqual(f.counts, { snapshots: 0, submissions: 1 });
+  assert.deepEqual(f.counts, { snapshots: 1, submissions: 1 });
 });
 
 // Documented limitation: without an observed assistant, a user message or an
