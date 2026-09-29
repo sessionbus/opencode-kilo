@@ -189,7 +189,11 @@ export class NativeOwners {
   // starts a new generation; idle-time input keeps the plain status path.
   async #terminalStatus(record, signal) {
     const status = await this.#status(record, signal);
-    if (status !== "idle") { record.terminal = { before: record.assistant }; return status; }
+    if (status !== "idle") {
+      if (!record.terminal) record.terminal = { before: record.assistant,
+        assistant: record.assistant !== record.completed ? record.assistant : undefined };
+      return status;
+    }
     const terminal = record.terminal;
     if (!terminal) return status;
     const observed = record.assistant !== terminal.before ? record.assistant : undefined;

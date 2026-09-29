@@ -411,14 +411,14 @@ test("OpenCode busy-queued input needs completion and a later idle, not the earl
   const f = await busyQueued(t, halted);
   await f.idle(); // No assistant event yet: the snapshot binds the incomplete assistant.
   assert.deepEqual(f.counts, { snapshots: 1, submissions: 0 });
-  await f.idle("busy"); await f.idle(); // A new busy observation drops that binding.
-  assert.deepEqual(f.counts, { snapshots: 2, submissions: 0 });
+  await f.idle("busy"); await f.idle(); // A repeated busy check stays in this generation.
+  assert.deepEqual(f.counts, { snapshots: 1, submissions: 0 });
   await f.update(completed); // Marks only; the old Runner is still installed.
   assert.equal(f.counts.submissions, 0);
   await f.idle(); // Runner.onIdle.
   assert.equal(f.counts.submissions, 1);
   await f.update(completed); await f.idle(); await f.owners.dispose();
-  assert.deepEqual(f.counts, { snapshots: 2, submissions: 1 }); assert.deepEqual(f.failures, []);
+  assert.deepEqual(f.counts, { snapshots: 1, submissions: 1 }); assert.deepEqual(f.failures, []);
 });
 
 test("OpenCode busy generation does not reuse a prior assistant witness", { skip: !nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
@@ -445,12 +445,23 @@ for (const order of ["before", "after"]) {
   });
 }
 
-test("OpenCode current-generation snapshot preserves the documented later-user fallback", { skip: !nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
+test("OpenCode later user message does not make the early halt idle sufficient", { skip: !nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
   const f = await busyQueued(t, operator, [halted]);
-  await f.idle(); assert.deepEqual(f.counts, { snapshots: 1, submissions: 1 });
-  await f.update(completed);
+  await f.idle(); assert.equal(f.counts.submissions, 0);
+  await f.update(completed); assert.equal(f.counts.submissions, 0);
   await f.idle(); await f.owners.dispose();
-  assert.deepEqual(f.counts, { snapshots: 1, submissions: 1 });
+  assert.deepEqual(f.counts, { snapshots: 0, submissions: 1 });
+});
+
+test("OpenCode repeated busy check preserves the current assistant witness", { skip: !nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
+  const f = await busyQueued(t, operator);
+  await f.update(halted);
+  await f.idle("busy"); await f.idle();
+  assert.deepEqual(f.counts, { snapshots: 0, submissions: 0 });
+  await f.update(completed); await f.idle();
+  assert.equal(f.counts.submissions, 1);
+  await f.update(completed); await f.idle(); await f.owners.dispose();
+  assert.deepEqual(f.counts, { snapshots: 0, submissions: 1 }); assert.deepEqual(f.failures, []);
 });
 
 // Documented limitation: without an observed assistant, a user message or an
