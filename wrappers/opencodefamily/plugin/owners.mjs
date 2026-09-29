@@ -209,7 +209,7 @@ export class NativeOwners {
       const latest = messages.at(-1)?.info;
       terminal.assistant = latest?.role === "assistant" && typeof latest.time?.completed !== "number" ? latest.id : null;
     }
-    const assistant = observed ?? terminal.assistant;
+    const assistant = record.assistant !== terminal.before ? record.assistant : observed ?? terminal.assistant;
     if (assistant !== null && record.settled !== assistant) return "busy";
     record.terminal = undefined;
     return record.status;

@@ -464,6 +464,36 @@ test("OpenCode repeated busy check preserves the current assistant witness", { s
   assert.deepEqual(f.counts, { snapshots: 0, submissions: 1 }); assert.deepEqual(f.failures, []);
 });
 
+test("OpenCode fallback snapshot rechecks an assistant observed while pending", { skip: !nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
+  const entered = deferred(), release = deferred();
+  let busy = true;
+  const counts = { snapshots: 0, submissions: 0 };
+  const f = await fixture(t, { status: async () => result(busy ? { ses_target: { type: "busy" } } : {}),
+    messages: async (params) => {
+      counts.snapshots++; assert.deepEqual(params, { sessionID: "ses_target", limit: 1 });
+      entered.resolve(); await release.promise;
+      return result([{ info: operator, parts: [] }]);
+    }, promptAsync: async () => { counts.submissions++; return result(undefined, 204); } });
+  await f.action("ses_target");
+  assert.equal((await f.wires.get("ses_target").call("message.deliver", inbound())).disposition, "queued_for_next_turn");
+
+  busy = false;
+  f.events.emit("session.status", { properties: { sessionID: "ses_target", status: { type: "idle" } } });
+  await entered.promise;
+  f.events.emit("message.updated", { properties: { sessionID: halted.sessionID, info: halted } });
+  release.resolve(); await nextTurn();
+  assert.deepEqual(counts, { snapshots: 1, submissions: 0 });
+
+  f.events.emit("message.updated", { properties: { sessionID: completed.sessionID, info: completed } });
+  await nextTurn(); assert.equal(counts.submissions, 0);
+  f.events.emit("session.status", { properties: { sessionID: "ses_target", status: { type: "idle" } } });
+  await nextTurn(); assert.equal(counts.submissions, 1);
+  f.events.emit("message.updated", { properties: { sessionID: completed.sessionID, info: completed } });
+  f.events.emit("session.status", { properties: { sessionID: "ses_target", status: { type: "idle" } } });
+  await nextTurn(); await f.owners.dispose();
+  assert.deepEqual(counts, { snapshots: 1, submissions: 1 }); assert.deepEqual(f.failures, []);
+});
+
 // Documented limitation: without an observed assistant, a user message or an
 // already completed assistant cannot be ordered against this idle.
 for (const latest of [operator, completed]) {
