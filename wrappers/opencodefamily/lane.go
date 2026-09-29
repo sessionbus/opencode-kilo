@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	kit "github.com/antst/sessionbus/bus/sdk/go"
+	"github.com/antst/sessionbus/bus/sdk/go/protocol"
 	"github.com/sessionbus/peer-common/host"
 )
 
@@ -295,7 +296,13 @@ func (p *Wrapper) retire(shutdown func()) {
 	p.mu.Unlock()
 	go func() {
 		// The final transport close normally wins over this response.
-		_ = caller.Close(context.Background(), kit.SessionCloseRequest{SessionID: id})
+		err := caller.Close(context.Background(), kit.SessionCloseRequest{SessionID: id})
+		// Busy is also the answer while an admitted close owns retirement and has
+		// not yet entered Close; a hard shutdown would drop its pending reads.
+		var refused *kit.ProtocolError
+		if errors.As(err, &refused) && refused.Code == protocol.Busy {
+			return
+		}
 		p.mu.Lock()
 		closing := p.closing
 		p.mu.Unlock()
