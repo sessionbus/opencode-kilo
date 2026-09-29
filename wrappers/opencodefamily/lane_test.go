@@ -77,7 +77,8 @@ func fakeNativeHTTP() {
 	var hold chan struct{}
 	var interrupted bool
 	var permission any
-	var holdProjection bool
+	var holdProjection, ackAfterTerminal bool
+	terminalWritten := make(chan struct{})
 	projectionStarted := make(chan struct{})
 	var projectionOnce sync.Once
 	events := make(chan any, 256)
@@ -190,6 +191,7 @@ func fakeNativeHTTP() {
 			mu.Lock()
 			history = append(history, user)
 			holdProjection = text == "projection-held"
+			ackAfterTerminal = text == "hold-permission-denied"
 			mu.Unlock()
 			if mode := os.Getenv("OPENCODE_TEST_SUMMARY"); mode == "event-user" {
 				emit("message.updated", map[string]any{"sessionID": id, "info": reviewUserSummary(user.Info)})
@@ -208,8 +210,12 @@ func fakeNativeHTTP() {
 			mu.Unlock()
 			emit("session.status", map[string]any{"sessionID": id, "status": map[string]string{"type": "busy"}})
 			startOnce.Do(func() { close(started) })
-			if text == "hold-permission" {
-				emit("permission.asked", map[string]any{"id": "per_fixture", "sessionID": id, "permission": "bash", "patterns": []string{"fixture"}, "metadata": map[string]any{}})
+			if strings.HasPrefix(text, "hold-permission") {
+				request := "per_fixture"
+				if text == "hold-permission-fail" {
+					request = "per_unanswerable" // No native reply route: the rejection call fails.
+				}
+				emit("permission.asked", map[string]any{"id": request, "sessionID": id, "permission": "bash", "patterns": []string{"fixture"}, "metadata": map[string]any{}})
 			}
 			if text == "hold-question" || strings.HasPrefix(text, "review-plan-") {
 				emit("question.asked", map[string]any{"id": "que_fixture", "sessionID": id, "questions": []any{}})
@@ -255,6 +261,13 @@ func fakeNativeHTTP() {
 					answer.Parts = append(answer.Parts, raw)
 				}
 			}
+			if text == "hold-permission-denied" || text == "toolcalls-denied" {
+				// Observed native terminal after a rejected permission (OpenCode 1.18.29, Kilo 7.6.2).
+				answer.Info.Finish = "tool-calls"
+				part := map[string]any{"type": "tool", "sessionID": id, "messageID": answer.Info.ID, "tool": "bash", "callID": "call_denied", "state": map[string]any{"status": "error", "input": map[string]any{}, "error": "The user rejected permission to use this specific tool call.", "time": map[string]int{"start": 1, "end": 2}}}
+				raw, _ := json.Marshal(part)
+				answer.Parts = append(answer.Parts, raw)
+			}
 			if strings.HasPrefix(text, "review-plan-") {
 				answer.Info.Finish = strings.TrimPrefix(text, "review-plan-")
 				part := map[string]any{"type": "tool", "sessionID": id, "messageID": answer.Info.ID, "tool": "plan_exit", "callID": "call_plan", "state": map[string]any{"status": "completed", "input": map[string]any{}, "output": "Plan ready", "title": "Plan", "metadata": map[string]any{}, "time": map[string]int{"start": 1, "end": 2}}}
@@ -270,6 +283,15 @@ func fakeNativeHTTP() {
 			history = append(history, answer)
 			hold = nil
 			mu.Unlock()
+			if text == "hold-permission-denied" {
+				// Deliver the whole terminal before acknowledging the rejection.
+				b, _ := json.Marshal(answer)
+				w.Header().Set("Content-Length", strconv.Itoa(len(b)))
+				_, _ = w.Write(b)
+				w.(http.Flusher).Flush()
+				close(terminalWritten)
+				return
+			}
 			reply(answer)
 		case r.URL.Path == "/session/"+id+"/abort":
 			if kind == kiloNative && r.URL.Query().Get("scope") != "" {
@@ -301,11 +323,19 @@ func fakeNativeHTTP() {
 			}
 			mu.Lock()
 			rejections++
+			delayed := ackAfterTerminal
 			if hold != nil {
 				close(hold)
 				hold = nil
 			}
 			mu.Unlock()
+			if delayed {
+				select {
+				case <-terminalWritten:
+				case <-r.Context().Done():
+					return
+				}
+			}
 			reply(true)
 		case r.URL.Path == "/fixture/term":
 			select {
@@ -731,6 +761,77 @@ func TestLegacyWorkerEventLossJoinsHeldRunAndOwnedChild(t *testing.T) {
 				case <-f.ctx.Done():
 					t.Fatalf("%s did not settle after owner loss", name)
 				}
+			}
+		})
+	}
+}
+
+func TestLegacyWorkerAcknowledgedPermissionRejectionIsRetainedTerminal(t *testing.T) {
+	for _, kind := range []nativeKind{openCodeNative, kiloNative} {
+		for _, tc := range []struct {
+			input, outcome, result string
+			rejections             int
+		}{
+			// The terminal arrives before the rejection acknowledgement; the Run joins it.
+			{"hold-permission-denied", "failed", kind.title() + " run ended by permission rejection", 1},
+			// The same transcript without a wrapper rejection has no retained result.
+			{"toolcalls-denied", "", "", 0},
+			// A completed stop after the acknowledged rejection still wins.
+			{"hold-permission", "completed", "answer:hold-permission", 1},
+		} {
+			t.Run(kind.title()+"/"+tc.input, func(t *testing.T) {
+				f := newWorkerKindFixture(t, kind, nil)
+				if kind == kiloNative {
+					t.Cleanup(func() { f.p.stopKiloChild(true) })
+				}
+				f.start(t, 1, tc.input)
+				got := f.wait(t, 1)
+				if tc.outcome == "" {
+					if got.State != "unavailable" || got.Result != nil || got.Reason != "native terminal lacks completed assistant" {
+						t.Fatalf("unrelated tool-calls terminal: %+v", got)
+					}
+				} else if got.State != "done" || got.Result == nil || got.Result.Outcome != tc.outcome || got.Result.Result != tc.result {
+					t.Fatalf("terminal: %+v", got)
+				}
+				raw, err := f.p.client.call(f.ctx, "GET", "/fixture/state", nil, 200)
+				var state struct{ Rejections int }
+				if err != nil || json.Unmarshal(raw, &state) != nil || state.Rejections != tc.rejections {
+					t.Fatalf("native rejections=%s/%v", raw, err)
+				}
+				if kind == kiloNative {
+					closeKiloFixture(t, f)
+				}
+			})
+		}
+	}
+}
+
+func TestLegacyWorkerFailedPermissionRejectionFailsOwner(t *testing.T) {
+	for _, kind := range []nativeKind{openCodeNative, kiloNative} {
+		t.Run(kind.title(), func(t *testing.T) {
+			f := newWorkerKindFixture(t, kind, nil)
+			if kind == kiloNative {
+				t.Cleanup(func() { f.p.stopKiloChild(true) })
+			}
+			f.start(t, 1, "hold-permission-fail")
+			var frame protocol.Frame
+			select {
+			case frame = <-f.ready:
+			case <-f.ctx.Done():
+				t.Fatal("Worker did not publish the Run")
+			}
+			var ready protocol.TurnReady
+			if err := json.Unmarshal(frame.Params, &ready); err != nil {
+				t.Fatal(err)
+			}
+			cause := context.Cause(f.p.ctx)
+			if ready.State != "unavailable" || ready.Outcome != "" || cause == nil || cause.Error() != kind.title()+" POST /permission/per_unanswerable/reply returned HTTP 404" {
+				t.Fatalf("failed rejection: ready=%+v cause=%v", ready, cause)
+			}
+			select {
+			case <-f.worker.Closed():
+			case <-f.ctx.Done():
+				t.Fatal("failed rejection did not retire the owner")
 			}
 		})
 	}
