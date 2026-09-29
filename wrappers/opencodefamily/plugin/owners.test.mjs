@@ -8,6 +8,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { setImmediate as nextTurn } from "node:timers/promises";
 import { Connection } from "@sessionbus/kit";
 import { NativeOwners } from "./owners.mjs";
 import { InteractiveEndpoint } from "./endpoint.mjs";
@@ -46,6 +47,7 @@ async function fixture(t, options = {}) {
       return options.get ? options.get(params, config) : result(info(params.sessionID));
     },
     async status(params, config) { return options.status ? options.status(params, config) : result({}); },
+    async messages(params, config) { return options.messages ? options.messages(params, config) : result([]); },
     async update(params, config) { updates.push(params); return options.update ? options.update(params, config) : result(info(params.sessionID, params.title)); },
     async promptAsync(params, config) {
       if (!options.promptAsync) throw new Error("unexpected model input");
@@ -378,3 +380,58 @@ for (const bad of [result({}), result([{ sessionID: "wrong" }]), { error: new Er
     assert.equal(receipt.disposition, "rejected"); assert.equal(submissions, 0);
   });
 }
+
+// Native halt order: idle is published before cleanup sets time.completed.
+const halted = { id: "msg_halted", sessionID: "ses_target", role: "assistant", parentID: "msg_user", time: { created: 1 } };
+const completed = { ...halted, time: { created: 1, completed: 2 }, finish: null };
+const updated = (info) => ({ properties: { sessionID: info.sessionID, info } });
+async function busyQueued(t, latest) {
+  let busy = true;
+  const counts = { snapshots: 0, submissions: 0 }, snapshot = deferred(), submitted = deferred();
+  const f = await fixture(t, { status: async () => result(busy ? { ses_target: { type: "busy" } } : {}),
+    messages: async (params) => {
+      counts.snapshots++; assert.deepEqual(params, { sessionID: "ses_target", limit: 1 });
+      snapshot.resolve(); return result([{ info: latest, parts: [] }]);
+    }, promptAsync: async () => { counts.submissions++; submitted.resolve(); return result(undefined, 204); } });
+  await f.action("ses_target");
+  assert.equal((await f.wires.get("ses_target").call("message.deliver", inbound())).disposition, "queued_for_next_turn");
+  const idle = () => { busy = false; f.events.emit("session.status", { properties: { sessionID: "ses_target", status: { type: "idle" } } }); };
+  return { ...f, counts, idle, snapshot: snapshot.promise, submitted: submitted.promise };
+}
+
+test("OpenCode busy-queued input ignores early halt idle until its assistant completes", { skip: !nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
+  const f = await busyQueued(t, halted);
+  f.idle(); await Promise.race([f.snapshot, f.submitted]); await nextTurn();
+  assert.equal(f.counts.submissions, 0);
+  f.events.emit("message.updated", updated(completed));
+  await f.submitted;
+  f.events.emit("message.updated", updated(completed)); f.idle();
+  await nextTurn(); await f.owners.dispose();
+  assert.deepEqual(f.counts, { snapshots: 1, submissions: 1 }); assert.deepEqual(f.failures, []);
+});
+
+for (const latest of [completed, halted]) {
+  test(`OpenCode completion before idle hands off busy-queued input once (${latest === halted ? "stale" : "current"} snapshot)`, { skip: !nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
+    const f = await busyQueued(t, latest);
+    f.events.emit("message.updated", updated(completed));
+    await nextTurn(); assert.equal(f.counts.submissions, 0);
+    f.idle(); await f.submitted;
+    f.idle(); await nextTurn(); await f.owners.dispose();
+    assert.deepEqual(f.counts, { snapshots: 1, submissions: 1 });
+  });
+}
+
+test("idle-time delivery hands off directly without a prior assistant snapshot", { timeout: 5000 }, async (t) => {
+  let snapshots = 0, submissions = 0;
+  const f = await fixture(t, { messages: async () => { snapshots++; return result([{ info: halted, parts: [] }]); },
+    promptAsync: async () => { submissions++; return result(undefined, 204); } });
+  await f.action("ses_target");
+  assert.equal((await f.wires.get("ses_target").call("message.deliver", inbound())).disposition, "written");
+  assert.equal(submissions, 1); assert.equal(snapshots, 0);
+});
+
+test("Kilo busy-queued input still hands off on native idle without a terminal witness", { skip: nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
+  const f = await busyQueued(t, halted);
+  f.idle(); await f.submitted; await f.owners.dispose();
+  assert.deepEqual(f.counts, { snapshots: 0, submissions: 1 });
+});
