@@ -185,8 +185,9 @@ export class NativeOwners {
   // OpenCode's halt publishes idle before cleanup completes its assistant, and
   // its Runner stays installed until a final idle; a prompt stored in between
   // never runs. Input that saw this session busy hands off only on an idle
-  // observed after the active assistant's completion. A later busy observation
-  // starts a new generation; idle-time input keeps the plain status path.
+  // observed after the active assistant's completion. The first busy observation
+  // starts a generation; repeated busy observations preserve it until handoff.
+  // Idle-time input keeps the plain status path.
   async #terminalStatus(record, signal) {
     const status = await this.#status(record, signal);
     if (status !== "idle") {
