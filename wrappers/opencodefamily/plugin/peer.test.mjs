@@ -61,7 +61,7 @@ test("spawn and resume retain response trace through actual kit and native tool"
   t.after(() => hooks.dispose());
   for (const trace of [undefined, "off", "events", "content"]) {
     for (const args of [{name:"child", product:"fixture-worker", open:{}}, {resume_session_id:"child@local"}]) {
-      expected = {session_id:"child@local", policy:{persistent:false, auto_close_ms:60000, idle_message:"run", notify:true, ...(trace === undefined ? {} : {trace})}};
+      expected = {session_id:"child@local", policy:{persistent:false, auto_close_ms:60000, notify:true, ...(trace === undefined ? {} : {trace})}};
       const output = await hooks.tool.sessionbus.execute({action:"spawn", arguments:args}, {sessionID:identity.session_id, messageID:"msg_fixture_call"});
       assert.deepEqual(JSON.parse(output), expected);
     }
