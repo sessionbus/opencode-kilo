@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	kit "github.com/antst/sessionbus/bus/sdk/go"
+	"github.com/antst/sessionbus/bus/sdk/go/protocol"
 	"github.com/sessionbus/peer-common/host"
 )
 
@@ -209,7 +210,7 @@ func (p *Wrapper) Open(ctx context.Context, request kit.OpenRequest) (result kit
 			p.clearRun(run)
 		}
 		if opened && !closing && shutdown != nil {
-			shutdown()
+			p.retire(shutdown)
 		}
 	}()
 	var address string
@@ -283,6 +284,32 @@ func (p *Wrapper) fail(err error) {
 		p.cancel(err)
 	}
 	p.mu.Unlock()
+}
+
+// retire ends an adopted owner after unexpected failure with an ordinary close
+// of its own lane. The Worker answers pending reads of the published terminal
+// before it joins Close, so this is detached from the joined monitor. Shutdown
+// remains only for a close that never reached this owner.
+func (p *Wrapper) retire(shutdown func()) {
+	p.mu.Lock()
+	caller, id := p.caller, p.id
+	p.mu.Unlock()
+	go func() {
+		// The final transport close normally wins over this response.
+		err := caller.Close(context.Background(), kit.SessionCloseRequest{SessionID: id})
+		// Busy is also the answer while an admitted close owns retirement and has
+		// not yet entered Close; a hard shutdown would drop its pending reads.
+		var refused *kit.ProtocolError
+		if errors.As(err, &refused) && refused.Code == protocol.Busy {
+			return
+		}
+		p.mu.Lock()
+		closing := p.closing
+		p.mu.Unlock()
+		if !closing {
+			shutdown()
+		}
+	}()
 }
 func (p *Wrapper) clearRun(run *kit.Run) {
 	p.mu.Lock()

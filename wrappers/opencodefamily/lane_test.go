@@ -414,6 +414,8 @@ type workerFixture struct {
 	next    int64
 	pending map[int64]chan protocol.Frame
 	ready   chan protocol.Frame
+	closes  chan protocol.Frame
+	claimed bool // an admitted ordinary close owns the lane
 	done    chan struct{}
 	ctx     context.Context
 }
@@ -472,7 +474,7 @@ func newWorkerOpenPolicyFixture(t *testing.T, kind nativeKind, decorate func(*Wr
 		t.Fatal(err)
 	}
 	_ = c.SetDeadline(time.Now().Add(20 * time.Second))
-	f := &workerFixture{p: p, worker: worker, c: c, pending: map[int64]chan protocol.Frame{}, ready: make(chan protocol.Frame, 256), done: make(chan struct{}), ctx: ctx}
+	f := &workerFixture{p: p, worker: worker, c: c, pending: map[int64]chan protocol.Frame{}, ready: make(chan protocol.Frame, 256), closes: make(chan protocol.Frame, 2), done: make(chan struct{}), ctx: ctx}
 	hello := make(chan struct{})
 	go func() {
 		defer close(f.done)
@@ -487,7 +489,21 @@ func newWorkerOpenPolicyFixture(t *testing.T, kind nativeKind, decorate func(*Wr
 				panic(err)
 			}
 			f.mu.Lock()
-			if frame.Method != "" {
+			if frame.Method == "session.close" {
+				// Like the daemon, route a lane's own close to its Worker; record the
+				// request and the Worker's answer. The Worker's final transport close
+				// supersedes this call's response. A claimed lane answers Busy.
+				f.closes <- frame
+				var b []byte
+				if f.claimed {
+					b, _ = protocol.ErrorBytes(frame.ID, protocol.Busy, nil)
+				} else {
+					f.next++
+					f.pending[f.next] = f.closes
+					b, _ = protocol.RequestBytes(f.next, frame.Method, frame.Params)
+				}
+				_, _ = c.Write(b)
+			} else if frame.Method != "" {
 				result := map[string]any{}
 				if frame.Method == "session.list" {
 					result["sessions"] = []any{}
@@ -551,6 +567,24 @@ func (f *workerFixture) call(t *testing.T, method string, params any, out any) {
 	case <-f.ctx.Done():
 		t.Fatalf("%s: %v", method, f.ctx.Err())
 	}
+}
+
+// begin writes one request whose response the caller collects later.
+func (f *workerFixture) begin(t *testing.T, method string, params any) chan protocol.Frame {
+	t.Helper()
+	f.mu.Lock()
+	f.next++
+	response := make(chan protocol.Frame, 1)
+	f.pending[f.next] = response
+	b, err := protocol.RequestBytes(f.next, method, params)
+	if err == nil {
+		_, err = f.c.Write(b)
+	}
+	f.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return response
 }
 func (f *workerFixture) start(t *testing.T, seq int, text string) {
 	f.call(t, "turn.execute", protocol.ExecuteRequest{SessionID: "ses_native@local", RunID: fmt.Sprintf("g/%d", seq), Input: text}, nil)
@@ -761,6 +795,185 @@ func TestLegacyWorkerEventLossJoinsHeldRunAndOwnedChild(t *testing.T) {
 				case <-f.ctx.Done():
 					t.Fatalf("%s did not settle after owner loss", name)
 				}
+			}
+		})
+	}
+}
+
+func TestLegacyWorkerOwnerFailureRetiresAfterPendingWait(t *testing.T) {
+	for _, kind := range []nativeKind{openCodeNative, kiloNative} {
+		t.Run(kind.title(), func(t *testing.T) {
+			f := newWorkerKindFixture(t, kind, nil)
+			if kind == kiloNative {
+				t.Cleanup(func() { f.p.stopKiloChild(true) })
+			}
+			f.start(t, 1, "hold-event-loss")
+			if _, err := f.p.client.call(f.ctx, "GET", "/fixture/started", nil, 200); err != nil {
+				t.Fatal(err)
+			}
+			waited := f.begin(t, "turn.wait", kit.WaitRequest{SessionID: "ses_native@local", RunID: "g/1"})
+			// The Worker dispatches frames in order: this read follows the wait's registration.
+			var status kit.RunStatus
+			f.call(t, "turn.status", kit.ReadRequest{SessionID: "ses_native@local", RunID: "g/1"}, &status)
+			if status.State != "running" {
+				t.Fatalf("status=%+v", status)
+			}
+			_, _ = f.p.client.call(f.ctx, "POST", "/fixture/end-events", nil, 200)
+			var ready protocol.TurnReady
+			select {
+			case frame := <-f.ready:
+				if err := json.Unmarshal(frame.Params, &ready); err != nil {
+					t.Fatal(err)
+				}
+			case <-f.ctx.Done():
+				t.Fatal("Worker did not publish the failed Run")
+			}
+			if ready.State != "unavailable" || ready.Reason == "" {
+				t.Fatalf("ready=%+v", ready)
+			}
+			// Daemon EOF detaches the row; later reads are then not_connected.
+			select {
+			case <-f.done:
+			case <-f.ctx.Done():
+				t.Fatal("failed owner did not go offline")
+			}
+			// The reader delivers every frame it read before it observes EOF.
+			select {
+			case frame := <-waited:
+				var got kit.RunStatus
+				if frame.Error != nil || json.Unmarshal(frame.Result, &got) != nil || got.State != "unavailable" || got.Result != nil || got.Reason != ready.Reason {
+					t.Fatalf("pending wait=%+v %s", frame.Error, frame.Result)
+				}
+			default:
+				t.Fatal("transport close won over the pending wait")
+			}
+			select {
+			case frame := <-f.closes:
+				var request kit.SessionCloseRequest
+				if json.Unmarshal(frame.Params, &request) != nil || request != (kit.SessionCloseRequest{SessionID: "ses_native"}) {
+					t.Fatalf("self-close=%s", frame.Params)
+				}
+			default:
+				t.Fatal("owner retired without its own ordinary close")
+			}
+			// Only the Worker's ordinary close handler answers the routed close.
+			select {
+			case frame := <-f.closes:
+				if frame.Method != "" || frame.Error != nil {
+					t.Fatalf("routed close=%+v", frame)
+				}
+			default:
+				t.Fatal("hard shutdown won over the ordinary close")
+			}
+			select {
+			case <-f.worker.Closed():
+			case <-f.ctx.Done():
+				t.Fatal("product Close did not join")
+			}
+		})
+	}
+}
+
+// Holds the Worker's ordinary close after it drained reads, before the owner's
+// Close is entered. It introduces no production hook.
+type closeHeldProduct struct {
+	*Wrapper
+	entered, release chan struct{}
+}
+
+func (p *closeHeldProduct) Close(ctx context.Context, request kit.SessionCloseRequest) error {
+	close(p.entered)
+	<-p.release
+	return p.Wrapper.Close(ctx, request)
+}
+func TestLegacyWorkerBusySelfCloseLeavesAdmittedClose(t *testing.T) {
+	for _, kind := range []nativeKind{openCodeNative, kiloNative} {
+		t.Run(kind.title(), func(t *testing.T) {
+			held := &closeHeldProduct{entered: make(chan struct{}), release: make(chan struct{})}
+			f := newWorkerKindFixture(t, kind, func(p *Wrapper) kit.WorkerCallbacks { held.Wrapper = p; return held })
+			var once sync.Once
+			release := func() { once.Do(func() { close(held.release) }) }
+			t.Cleanup(release)
+			if kind == kiloNative {
+				t.Cleanup(func() { f.p.stopKiloChild(true) })
+			}
+			f.start(t, 1, "hold-event-loss")
+			if _, err := f.p.client.call(f.ctx, "GET", "/fixture/started", nil, 200); err != nil {
+				t.Fatal(err)
+			}
+			waited := f.begin(t, "turn.wait", kit.WaitRequest{SessionID: "ses_native@local", RunID: "g/1"})
+			var status kit.RunStatus
+			f.call(t, "turn.status", kit.ReadRequest{SessionID: "ses_native@local", RunID: "g/1"}, &status)
+			if status.State != "running" {
+				t.Fatalf("status=%+v", status)
+			}
+			f.mu.Lock()
+			f.claimed = true
+			f.mu.Unlock()
+			_, _ = f.p.client.call(f.ctx, "POST", "/fixture/end-events", nil, 200)
+			var ready protocol.TurnReady
+			select {
+			case frame := <-f.ready:
+				if err := json.Unmarshal(frame.Params, &ready); err != nil {
+					t.Fatal(err)
+				}
+			case <-f.ctx.Done():
+				t.Fatal("Worker did not publish the failed Run")
+			}
+			if ready.State != "unavailable" || ready.Reason == "" {
+				t.Fatalf("ready=%+v", ready)
+			}
+			// The admitted close reaches the Worker after the failed Run's terminal.
+			closed := f.begin(t, "session.close", kit.SessionCloseRequest{SessionID: "ses_native@local"})
+			select {
+			case frame := <-f.closes:
+				var request kit.SessionCloseRequest
+				if json.Unmarshal(frame.Params, &request) != nil || request != (kit.SessionCloseRequest{SessionID: "ses_native"}) {
+					t.Fatalf("self-close=%s", frame.Params)
+				}
+			case <-f.ctx.Done():
+				t.Fatal("owner failure did not request its own close")
+			}
+			select {
+			case <-held.entered:
+			case <-f.ctx.Done():
+				t.Fatal("admitted close did not reach the owner")
+			}
+			// A hard shutdown follows a refused self-close at once. The held owner
+			// Close keeps the lane open while that is observed.
+			select {
+			case <-f.done:
+				t.Fatal("Busy self-close hard-shut the admitted close")
+			case <-time.After(100 * time.Millisecond):
+			}
+			// The Worker answers pending reads before it enters the owner's Close.
+			select {
+			case frame := <-waited:
+				var got kit.RunStatus
+				if frame.Error != nil || json.Unmarshal(frame.Result, &got) != nil || got.State != "unavailable" || got.Result != nil || got.Reason != ready.Reason {
+					t.Fatalf("pending wait=%+v %s", frame.Error, frame.Result)
+				}
+			default:
+				t.Fatal("admitted close entered Close before the pending wait")
+			}
+			release()
+			select {
+			case <-f.done:
+			case <-f.ctx.Done():
+				t.Fatal("admitted close did not finish")
+			}
+			select {
+			case frame := <-closed:
+				if frame.Error != nil {
+					t.Fatalf("admitted close=%+v", frame.Error)
+				}
+			default:
+				t.Fatal("admitted close lost its answer")
+			}
+			select {
+			case <-f.worker.Closed():
+			case <-f.ctx.Done():
+				t.Fatal("product Close did not join")
 			}
 		})
 	}

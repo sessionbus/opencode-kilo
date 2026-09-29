@@ -73,7 +73,7 @@ func (p *Wrapper) monitorKilo() {
 	closing, shutdown := p.closing, p.shutdown
 	p.mu.Unlock()
 	if adopted && !closing && shutdown != nil {
-		shutdown()
+		p.retire(shutdown)
 	}
 }
 
