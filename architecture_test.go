@@ -36,7 +36,7 @@ func TestRepositoryBoundary(t *testing.T) {
 
 func TestModuleAndImportBoundary(t *testing.T) {
 	mod := string(read(t, "go.mod"))
-	for _, s := range []string{"module github.com/sessionbus/opencode-kilo", "github.com/sessionbus/peer-common v0.0.0-20260929103915-8348c6c8b18c", "github.com/antst/sessionbus/bus/sdk/go v0.5.9"} {
+	for _, s := range []string{"module github.com/sessionbus/opencode-kilo", "github.com/sessionbus/peer-common v0.0.0-20260929104500-c5551a29654c", "github.com/antst/sessionbus/bus/sdk/go v0.5.9"} {
 		if !strings.Contains(mod, s) {
 			t.Errorf("missing module binding %q", s)
 		}

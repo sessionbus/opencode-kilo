@@ -56,7 +56,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-github.com/sessionbus/peer-common v0.0.0-20260929103915-8348c6c8b18c
+github.com/sessionbus/peer-common v0.0.0-20260929104500-c5551a29654c
 ============================================================================
 
 MIT License
