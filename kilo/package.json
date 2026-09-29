@@ -37,6 +37,6 @@
     "directory": "kilo"
   },
   "dependencies": {
-    "@sessionbus/kit": "0.5.8"
+    "@sessionbus/kit": "0.5.9"
   }
 }
