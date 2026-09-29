@@ -62,6 +62,9 @@ export class NativeOwners {
       }
       record.status = status;
       record.statusRevision++;
+      // Only an idle observed after the assistant's completion follows the
+      // native Runner's removal; the halt's earlier idle does not settle it.
+      if (status === "idle" && nativeProduct.terminalHandoff) record.settled = record.completed;
       if (status === "idle" && record.delivery) this.#background(record.delivery.idle());
     }));
     if (nativeProduct.blockers) {
@@ -76,12 +79,12 @@ export class NativeOwners {
     }
     if (nativeProduct.terminalHandoff) {
       this.#unsub.push(api.event.on("message.updated", (event) => {
-        const info = event.properties.info, record = object(info) && this.#owners.get(info.sessionID);
-        const terminal = record?.terminal;
-        if (!terminal || info.role !== "assistant" || typeof info.time?.completed !== "number") return;
-        // Native terminal witness; duplicates after handoff find no pending gate.
-        terminal.completed = info.id;
-        if (info.id === terminal.assistant && record.delivery) this.#background(record.delivery.idle());
+        const info = event.properties.info, record = object(info) && info.role === "assistant" && this.#owners.get(info.sessionID);
+        if (!record || typeof info.id !== "string") return;
+        // Marks only. Native updates only its active assistant, and cleanup
+        // publishes time.completed while the old Runner is still installed.
+        record.assistant = info.id;
+        if (typeof info.time?.completed === "number") record.completed = info.id;
       }));
     }
   }
@@ -179,19 +182,21 @@ export class NativeOwners {
     return this.#unblocked(record) ? "idle" : "busy";
   }
 
-  // OpenCode's halt publishes idle before cleanup completes its assistant; a
-  // prompt then is stored but its turn never runs. Input that saw this session
-  // busy binds the latest native message at idle and waits for its completion.
-  // A later busy observation starts a new generation; idle-time input is plain.
+  // OpenCode's halt publishes idle before cleanup completes its assistant, and
+  // its Runner stays installed until a final idle; a prompt stored in between
+  // never runs. Input that saw this session busy hands off only on an idle
+  // observed after the active assistant's completion. A later busy observation
+  // starts a new generation; idle-time input keeps the plain status path.
   async #terminalStatus(record, signal) {
     const status = await this.#status(record, signal);
     if (status !== "idle") { record.terminal = {}; return status; }
     const terminal = record.terminal;
     if (!terminal) return status;
-    if (terminal.assistant === undefined) {
-      // One bounded snapshot binds the generation and covers a missed earlier
-      // completion; one arriving meanwhile is kept by the event handler. A
-      // latest user message or completed assistant leaves nothing to await.
+    if (record.assistant === undefined && terminal.assistant === undefined) {
+      // No assistant event seen (owner attached mid-step): one bounded snapshot.
+      // Only an incomplete assistant guarantees a later completion and idle. A
+      // user message or completed assistant cannot be ordered against this
+      // idle; handing off then is the documented best-effort limitation.
       const messages = await this.#native(record, "messages", { sessionID: record.id, limit: 1 }, signal);
       if (!Array.isArray(messages) || messages.some((message) => !object(message?.info) || typeof message.info.id !== "string")) {
         throw new Error(`${nativeProduct.label} message snapshot is malformed`);
@@ -199,7 +204,8 @@ export class NativeOwners {
       const latest = messages.at(-1)?.info;
       terminal.assistant = latest?.role === "assistant" && typeof latest.time?.completed !== "number" ? latest.id : null;
     }
-    if (terminal.assistant !== null && terminal.completed !== terminal.assistant) return "busy";
+    const assistant = record.assistant ?? terminal.assistant;
+    if (assistant !== null && record.settled !== assistant) return "busy";
     record.terminal = undefined;
     return record.status;
   }

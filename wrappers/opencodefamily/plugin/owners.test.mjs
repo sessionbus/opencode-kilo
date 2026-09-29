@@ -381,42 +381,71 @@ for (const bad of [result({}), result([{ sessionID: "wrong" }]), { error: new Er
   });
 }
 
-// Native halt order: idle is published before cleanup sets time.completed.
+// Native halt order: an early idle, then cleanup sets time.completed, then the
+// Runner's own idle. A normal turn end publishes only that final idle.
 const halted = { id: "msg_halted", sessionID: "ses_target", role: "assistant", parentID: "msg_user", time: { created: 1 } };
 const completed = { ...halted, time: { created: 1, completed: 2 }, finish: null };
-const updated = (info) => ({ properties: { sessionID: info.sessionID, info } });
-async function busyQueued(t, latest) {
+const operator = { id: "msg_operator", sessionID: "ses_target", role: "user", time: { created: 3 } };
+async function busyQueued(t, latest, before = []) {
   let busy = true;
-  const counts = { snapshots: 0, submissions: 0 }, snapshot = deferred(), submitted = deferred();
+  const counts = { snapshots: 0, submissions: 0 }, submitted = deferred();
   const f = await fixture(t, { status: async () => result(busy ? { ses_target: { type: "busy" } } : {}),
     messages: async (params) => {
       counts.snapshots++; assert.deepEqual(params, { sessionID: "ses_target", limit: 1 });
-      snapshot.resolve(); return result([{ info: latest, parts: [] }]);
+      return result([{ info: latest, parts: [] }]);
     }, promptAsync: async () => { counts.submissions++; submitted.resolve(); return result(undefined, 204); } });
   await f.action("ses_target");
+  const update = async (info) => { f.events.emit("message.updated", { properties: { sessionID: info.sessionID, info } }); await nextTurn(); };
+  for (const info of before) await update(info);
   assert.equal((await f.wires.get("ses_target").call("message.deliver", inbound())).disposition, "queued_for_next_turn");
-  const idle = () => { busy = false; f.events.emit("session.status", { properties: { sessionID: "ses_target", status: { type: "idle" } } }); };
-  return { ...f, counts, idle, snapshot: snapshot.promise, submitted: submitted.promise };
+  // Native idle event; native reports `native` to the status query it drives.
+  const idle = async (native = "idle") => {
+    busy = native !== "idle";
+    f.events.emit("session.status", { properties: { sessionID: "ses_target", status: { type: "idle" } } });
+    await nextTurn();
+  };
+  return { ...f, counts, idle, update, submitted: submitted.promise };
 }
 
-test("OpenCode busy-queued input ignores early halt idle until its assistant completes", { skip: !nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
+test("OpenCode busy-queued input needs completion and a later idle, not the early halt idle", { skip: !nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
   const f = await busyQueued(t, halted);
-  f.idle(); await Promise.race([f.snapshot, f.submitted]); await nextTurn();
+  await f.idle(); // No assistant event yet: the snapshot binds the incomplete assistant.
+  assert.deepEqual(f.counts, { snapshots: 1, submissions: 0 });
+  await f.idle("busy"); await f.idle(); // A new busy observation drops that binding.
+  assert.deepEqual(f.counts, { snapshots: 2, submissions: 0 });
+  await f.update(completed); // Marks only; the old Runner is still installed.
   assert.equal(f.counts.submissions, 0);
-  f.events.emit("message.updated", updated(completed));
-  await f.submitted;
-  f.events.emit("message.updated", updated(completed)); f.idle();
-  await nextTurn(); await f.owners.dispose();
-  assert.deepEqual(f.counts, { snapshots: 1, submissions: 1 }); assert.deepEqual(f.failures, []);
+  await f.idle(); // Runner.onIdle.
+  assert.equal(f.counts.submissions, 1);
+  await f.update(completed); await f.idle(); await f.owners.dispose();
+  assert.deepEqual(f.counts, { snapshots: 2, submissions: 1 }); assert.deepEqual(f.failures, []);
 });
 
-for (const latest of [completed, halted]) {
-  test(`OpenCode completion before idle hands off busy-queued input once (${latest === halted ? "stale" : "current"} snapshot)`, { skip: !nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
+for (const order of ["before", "after"]) {
+  test(`OpenCode normal turn end hands off on its single idle (completion ${order} enqueue)`, { skip: !nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
+    const f = await busyQueued(t, halted, order === "before" ? [completed] : []);
+    if (order === "after") await f.update(completed);
+    assert.equal(f.counts.submissions, 0);
+    await f.idle(); assert.equal(f.counts.submissions, 1);
+    await f.update(completed); await f.idle(); await f.owners.dispose();
+    assert.deepEqual(f.counts, { snapshots: 0, submissions: 1 });
+  });
+}
+
+test("OpenCode later user message does not make the early halt idle sufficient", { skip: !nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
+  const f = await busyQueued(t, operator, [halted]);
+  await f.idle(); assert.equal(f.counts.submissions, 0);
+  await f.update(completed); assert.equal(f.counts.submissions, 0);
+  await f.idle(); await f.owners.dispose();
+  assert.deepEqual(f.counts, { snapshots: 0, submissions: 1 });
+});
+
+// Documented limitation: without an observed assistant, a user message or an
+// already completed assistant cannot be ordered against this idle.
+for (const latest of [operator, completed]) {
+  test(`OpenCode without an observed assistant hands off best effort (${latest.role} latest)`, { skip: !nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
     const f = await busyQueued(t, latest);
-    f.events.emit("message.updated", updated(completed));
-    await nextTurn(); assert.equal(f.counts.submissions, 0);
-    f.idle(); await f.submitted;
-    f.idle(); await nextTurn(); await f.owners.dispose();
+    await f.idle(); await f.owners.dispose();
     assert.deepEqual(f.counts, { snapshots: 1, submissions: 1 });
   });
 }
@@ -432,6 +461,6 @@ test("idle-time delivery hands off directly without a prior assistant snapshot",
 
 test("Kilo busy-queued input still hands off on native idle without a terminal witness", { skip: nativeProduct.terminalHandoff, timeout: 5000 }, async (t) => {
   const f = await busyQueued(t, halted);
-  f.idle(); await f.submitted; await f.owners.dispose();
+  await f.idle(); await f.submitted; await f.owners.dispose();
   assert.deepEqual(f.counts, { snapshots: 0, submissions: 1 });
 });

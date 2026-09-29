@@ -85,11 +85,17 @@ returned run explicitly. `list.self_info`, when supplied by the daemon, identifi
 the caller even if filters exclude its row. Older daemons may omit it; names
 and row ordering are not identity fallbacks.
 
-Interactive delivery keeps bounded unsent input while native status is busy and
-drains on native idle. A confirmed native handoff is `written`, not proof of
-model consumption in that turn. Attempted input is never replayed after an
-uncertain response, cancellation or terminal race. Native storage remains
-native; no wrapper history, result journal or restart recovery is added.
+Interactive delivery keeps bounded unsent input while native status is busy.
+Input queued while busy is handed off only after the active assistant's native
+completion and the native idle that follows it; a halted turn's earlier idle is
+not enough. Input arriving while idle is handed off directly. Limitation: if
+the owner saw no assistant event for that turn (attached mid-step or missed
+events), a latest operator or native user message, or an already completed
+assistant, cannot be correlated with the idle, which then hands off best
+effort. A confirmed native handoff is `written`, not proof of model consumption
+in that turn. Attempted input is never replayed after an uncertain response,
+cancellation or terminal race. Native storage remains native; no wrapper
+history, result journal or restart recovery is added.
 
 The managed launcher selects authenticated native loopback HTTP so owned
 requests can be cancelled and joined. Caller hostname/port/mDNS/CORS switches
