@@ -209,7 +209,7 @@ func (p *Wrapper) Open(ctx context.Context, request kit.OpenRequest) (result kit
 			p.clearRun(run)
 		}
 		if opened && !closing && shutdown != nil {
-			shutdown()
+			p.retire(shutdown)
 		}
 	}()
 	var address string
@@ -283,6 +283,26 @@ func (p *Wrapper) fail(err error) {
 		p.cancel(err)
 	}
 	p.mu.Unlock()
+}
+
+// retire ends an adopted owner after unexpected failure with an ordinary close
+// of its own lane. The Worker answers pending reads of the published terminal
+// before it joins Close, so this is detached from the joined monitor. Shutdown
+// remains only for a close that never reached this owner.
+func (p *Wrapper) retire(shutdown func()) {
+	p.mu.Lock()
+	caller, id := p.caller, p.id
+	p.mu.Unlock()
+	go func() {
+		// The final transport close normally wins over this response.
+		_ = caller.Close(context.Background(), kit.SessionCloseRequest{SessionID: id})
+		p.mu.Lock()
+		closing := p.closing
+		p.mu.Unlock()
+		if !closing {
+			shutdown()
+		}
+	}()
 }
 func (p *Wrapper) clearRun(run *kit.Run) {
 	p.mu.Lock()

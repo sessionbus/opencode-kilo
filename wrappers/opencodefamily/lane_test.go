@@ -414,6 +414,7 @@ type workerFixture struct {
 	next    int64
 	pending map[int64]chan protocol.Frame
 	ready   chan protocol.Frame
+	closes  chan protocol.Frame
 	done    chan struct{}
 	ctx     context.Context
 }
@@ -472,7 +473,7 @@ func newWorkerOpenPolicyFixture(t *testing.T, kind nativeKind, decorate func(*Wr
 		t.Fatal(err)
 	}
 	_ = c.SetDeadline(time.Now().Add(20 * time.Second))
-	f := &workerFixture{p: p, worker: worker, c: c, pending: map[int64]chan protocol.Frame{}, ready: make(chan protocol.Frame, 256), done: make(chan struct{}), ctx: ctx}
+	f := &workerFixture{p: p, worker: worker, c: c, pending: map[int64]chan protocol.Frame{}, ready: make(chan protocol.Frame, 256), closes: make(chan protocol.Frame, 2), done: make(chan struct{}), ctx: ctx}
 	hello := make(chan struct{})
 	go func() {
 		defer close(f.done)
@@ -487,7 +488,16 @@ func newWorkerOpenPolicyFixture(t *testing.T, kind nativeKind, decorate func(*Wr
 				panic(err)
 			}
 			f.mu.Lock()
-			if frame.Method != "" {
+			if frame.Method == "session.close" {
+				// Like the daemon, route a lane's own close to its Worker; record the
+				// request and the Worker's answer. The Worker's final transport close
+				// supersedes this call's response.
+				f.closes <- frame
+				f.next++
+				f.pending[f.next] = f.closes
+				b, _ := protocol.RequestBytes(f.next, frame.Method, frame.Params)
+				_, _ = c.Write(b)
+			} else if frame.Method != "" {
 				result := map[string]any{}
 				if frame.Method == "session.list" {
 					result["sessions"] = []any{}
@@ -761,6 +771,92 @@ func TestLegacyWorkerEventLossJoinsHeldRunAndOwnedChild(t *testing.T) {
 				case <-f.ctx.Done():
 					t.Fatalf("%s did not settle after owner loss", name)
 				}
+			}
+		})
+	}
+}
+
+func TestLegacyWorkerOwnerFailureRetiresAfterPendingWait(t *testing.T) {
+	for _, kind := range []nativeKind{openCodeNative, kiloNative} {
+		t.Run(kind.title(), func(t *testing.T) {
+			f := newWorkerKindFixture(t, kind, nil)
+			if kind == kiloNative {
+				t.Cleanup(func() { f.p.stopKiloChild(true) })
+			}
+			f.start(t, 1, "hold-event-loss")
+			if _, err := f.p.client.call(f.ctx, "GET", "/fixture/started", nil, 200); err != nil {
+				t.Fatal(err)
+			}
+			f.mu.Lock()
+			f.next++
+			id := f.next
+			waited := make(chan protocol.Frame, 1)
+			f.pending[id] = waited
+			b, err := protocol.RequestBytes(id, "turn.wait", kit.WaitRequest{SessionID: "ses_native@local", RunID: "g/1"})
+			if err == nil {
+				_, err = f.c.Write(b)
+			}
+			f.mu.Unlock()
+			if err != nil {
+				t.Fatal(err)
+			}
+			// The Worker dispatches frames in order: this read follows the wait's registration.
+			var status kit.RunStatus
+			f.call(t, "turn.status", kit.ReadRequest{SessionID: "ses_native@local", RunID: "g/1"}, &status)
+			if status.State != "running" {
+				t.Fatalf("status=%+v", status)
+			}
+			_, _ = f.p.client.call(f.ctx, "POST", "/fixture/end-events", nil, 200)
+			var ready protocol.TurnReady
+			select {
+			case frame := <-f.ready:
+				if err := json.Unmarshal(frame.Params, &ready); err != nil {
+					t.Fatal(err)
+				}
+			case <-f.ctx.Done():
+				t.Fatal("Worker did not publish the failed Run")
+			}
+			if ready.State != "unavailable" || ready.Reason == "" {
+				t.Fatalf("ready=%+v", ready)
+			}
+			// Daemon EOF detaches the row; later reads are then not_connected.
+			select {
+			case <-f.done:
+			case <-f.ctx.Done():
+				t.Fatal("failed owner did not go offline")
+			}
+			// The reader delivers every frame it read before it observes EOF.
+			select {
+			case frame := <-waited:
+				var got kit.RunStatus
+				if frame.Error != nil || json.Unmarshal(frame.Result, &got) != nil || got.State != "unavailable" || got.Result != nil || got.Reason != ready.Reason {
+					t.Fatalf("pending wait=%+v %s", frame.Error, frame.Result)
+				}
+			default:
+				t.Fatal("transport close won over the pending wait")
+			}
+			select {
+			case frame := <-f.closes:
+				var request kit.SessionCloseRequest
+				if json.Unmarshal(frame.Params, &request) != nil || request != (kit.SessionCloseRequest{SessionID: "ses_native"}) {
+					t.Fatalf("self-close=%s", frame.Params)
+				}
+			default:
+				t.Fatal("owner retired without its own ordinary close")
+			}
+			// Only the Worker's ordinary close handler answers the routed close.
+			select {
+			case frame := <-f.closes:
+				if frame.Method != "" || frame.Error != nil {
+					t.Fatalf("routed close=%+v", frame)
+				}
+			default:
+				t.Fatal("hard shutdown won over the ordinary close")
+			}
+			select {
+			case <-f.worker.Closed():
+			case <-f.ctx.Done():
+				t.Fatal("product Close did not join")
 			}
 		})
 	}
