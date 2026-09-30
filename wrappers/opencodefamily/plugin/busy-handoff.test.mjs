@@ -57,6 +57,25 @@ test("take shares the single consumer with the idle drain and resumes idle deman
   assert.equal(f.submissions.length, 1); assert.match(f.submissions[0].parts[0].text, /messageId":"two"/u);
 });
 
+// Dev1 review probe (952be57): the idle event lands while the write owns the
+// consumer and the FIFO is empty; input accepted before the write settles must
+// still wake the idle session.
+test("idle while a started take empties the FIFO keeps demand for input accepted before it settles", async (t) => {
+  let status = "busy";
+  const f = delivery(t, { status: async () => status });
+  await f.delivery.enqueue(f.life.signal, message("taken"));
+  const writing = deferred(), release = deferred();
+  const taking = f.delivery.take(f.life.signal, async (_text, _signal, started) => { started(); writing.resolve(); await release.promise; return {}; });
+  await writing.promise;
+  assert.equal(f.bytes(), 0);
+  status = "idle";
+  await f.delivery.idle();
+  assert.equal((await f.delivery.enqueue(f.life.signal, message("fresh"))).disposition, "queued_for_next_turn");
+  release.resolve(); await taking;
+  for (let i = 0; i < 20 && !f.submissions.length; i++) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(f.submissions.length, 1); assert.match(f.submissions[0].parts[0].text, /messageId":"fresh"/u);
+});
+
 test("take batches within the per-owner byte bound; the rest waits for a later step", async (t) => {
   const f = delivery(t);
   const big = (id) => ({ ...message(id), body: "x".repeat(600 * 1024) });

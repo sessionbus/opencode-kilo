@@ -67,8 +67,11 @@ export class NativeDelivery {
   }
 
   idle() {
-    if (this.#closed || !this.#queue.length) return Promise.resolve();
+    if (this.#closed) return Promise.resolve();
+    // Kept even while the FIFO is momentarily empty (a step handoff can hold the
+    // consumer): input accepted before that consumer settles drains then.
     this.#idleDemand = true;
+    if (!this.#queue.length) return Promise.resolve();
     return this.#drain(this.#options.signal);
   }
 
