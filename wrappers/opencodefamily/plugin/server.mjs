@@ -31,10 +31,12 @@ export function createServer(environment = launchEnvironment) {
     })().catch((error) => ready.settle(error));
     // Busy handoff for interactive owners; lanes keep their released behaviour.
     // chat.message records each session's newest prompt. Before each model call
-    // the transform asks the owner to append queued input to that prompt only,
-    // never to an older user (compaction passes a history head). It never waits
-    // for readiness and never throws into native: input not handed off stays in
-    // the owner's FIFO for a later step or the existing idle wake.
+    // the transform asks the owner to append queued input to the user message
+    // native is answering: the last user at or after that prompt (plugins may
+    // add synthetic users after it). A call whose messages lack the newest
+    // prompt (compaction passes an older history head) is not a target. It never
+    // waits for readiness and never throws into native: input not handed off
+    // stays in the owner's FIFO for a later step or the existing idle wake.
     const latest = new Map();
     const busyHooks = lane ? {} : {
       "chat.message": async (_input, output) => {
@@ -46,9 +48,11 @@ export function createServer(environment = launchEnvironment) {
       },
       "experimental.chat.messages.transform": async (_input, output) => {
         try {
-          const user = Array.isArray(output?.messages) ? output.messages.findLast((message) => message?.info?.role === "user") : undefined;
+          const messages = Array.isArray(output?.messages) ? output.messages : [];
+          const prompt = messages.findLastIndex((message) => message?.info?.role === "user" && latest.get(message.info.sessionID) === message.info.id);
+          const user = prompt < 0 ? undefined : messages.findLast((message, index) => index >= prompt && message?.info?.role === "user");
           const sessionID = user?.info?.sessionID;
-          if (!user || !Array.isArray(user.parts) || latest.get(sessionID) !== user.info.id) return;
+          if (!user || !Array.isArray(user.parts) || sessionID !== messages[prompt].info.sessionID) return;
           if (!connected || lifetime.signal.aborted || calls >= bridgeLimits.work) return;
           let after = "";
           for (const part of user.parts) if (typeof part?.id === "string" && part.id > after) after = part.id;

@@ -149,3 +149,17 @@ test("endpoint without a handoff owner answers method-not-found; the transform k
   await hooks["experimental.chat.messages.transform"]({}, { messages: [current] });
   assert.equal(current.parts.length, 1);
 });
+
+test("a synthetic user added after the prompt (observed with a skills plugin) is the handoff target", { timeout: 5000 }, async (t) => {
+  const requests = [];
+  const hooks = await interactive(t, async (params) => {
+    requests.push(params);
+    return { parts: [{ id: "prt_000000000009ABCDEFGHIJKLMN", sessionID: params.sessionID, messageID: params.messageID, type: "text", text: "queued" }] };
+  });
+  await hooks["chat.message"]({ sessionID: "ses_s" }, { message: { id: "msg_prompt", sessionID: "ses_s", role: "user" }, parts: [] });
+  const synthetic = user("msg_skills", [{ id: "prt_000000000002ABCDEFGHIJKLMN", sessionID: "ses_s", messageID: "msg_skills", type: "text", text: "skills", synthetic: true }]);
+  const messages = [user("msg_prompt"), synthetic, { info: { id: "msg_a", sessionID: "ses_s", role: "assistant", parentID: "msg_skills" }, parts: [] }];
+  await hooks["experimental.chat.messages.transform"]({}, { messages });
+  assert.deepEqual(requests, [{ sessionID: "ses_s", messageID: "msg_skills", after: "prt_000000000002ABCDEFGHIJKLMN" }]);
+  assert.equal(synthetic.parts.at(-1).text, "queued");
+});
