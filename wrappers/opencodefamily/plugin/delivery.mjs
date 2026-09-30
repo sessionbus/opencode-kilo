@@ -2,6 +2,7 @@
 
 import { nativeProduct } from "./profile.mjs";
 import { createHash } from "node:crypto";
+import { orderedPartID, partFloor } from "./native-input.mjs";
 
 export const deliveryLimits = Object.freeze({ messages: 64, ownerBytes: 1024 * 1024, totalBytes: 16 * 1024 * 1024 });
 
@@ -23,13 +24,16 @@ export class NativeDelivery {
   #active;
   #closed = false;
   #idleDemand = false;
+  #partFloor;
 
   constructor(options) { this.#options = options; }
 
   async enqueue(signal, request) {
     if (this.#closed || signal.aborted || this.#options.signal.aborted) return { disposition: "rejected", reason: "native owner closed" };
     const text = renderDelivery(request), bytes = Buffer.byteLength(text);
-    if (this.#queue.length >= deliveryLimits.messages || this.#bytes + bytes > deliveryLimits.ownerBytes || !this.#options.reserve(bytes)) {
+    // Leave room for the exact native tuple and JSON part framing too. The raw
+    // private reply shares the public one-MiB returned-data limit.
+    if (Buffer.byteLength(JSON.stringify({ text })) + 1024 > deliveryLimits.ownerBytes || this.#queue.length >= deliveryLimits.messages || this.#bytes + bytes > deliveryLimits.ownerBytes || !this.#options.reserve(bytes)) {
       return { disposition: "rejected", reason: "Sessionbus unsent input limit reached" };
     }
     const item = { text, bytes, id: `msg_${createHash("sha256").update(request.message_id).digest("hex").slice(0, 32)}`, attempted: false, written: false };
@@ -53,9 +57,50 @@ export class NativeDelivery {
   }
 
   idle() {
-    if (this.#closed || !this.#queue.length) return Promise.resolve();
+    if (this.#closed) return Promise.resolve();
     this.#idleDemand = true;
+    if (!this.#queue.length && !this.#active) return Promise.resolve();
     return this.#drain(this.#options.signal);
+  }
+
+  async step(signal, user, mayAttempt) {
+    // Hook and idle wake share one claim boundary, not a second inbox. A native
+    // step can arrive while an earlier status query is still settling.
+    while (this.#active) await this.#active;
+    const cancel = AbortSignal.any([signal, this.#options.signal]);
+    if (cancel.aborted || this.#closed) throw cancel.reason || new Error("native owner closed");
+    if (!mayAttempt()) return [];
+    const after = partFloor(user.after);
+    if (this.#partFloor?.messageID !== user.messageID || this.#partFloor?.sessionID !== user.sessionID) this.#partFloor = undefined;
+    if (!this.#queue.length || !mayAttempt()) return [];
+    const id = orderedPartID(this.#partFloor?.id > after ? this.#partFloor.id : after);
+    let resolve, reject;
+    const task = new Promise((yes, no) => { resolve = yes; reject = no; });
+    this.#active = task;
+    void (async () => {
+      const part = { id, sessionID: user.sessionID, messageID: user.messageID, type: "text", text: "" };
+      const batch = [];
+      for (const item of this.#queue) {
+        const text = part.text ? `${part.text}\n\n${item.text}` : item.text;
+        if (Buffer.byteLength(JSON.stringify({ parts: [{ ...part, text }] })) > deliveryLimits.ownerBytes) break;
+        part.text = text;
+        batch.push(item);
+      }
+      if (!batch.length) throw new Error("native input part exceeds returned-data limit");
+      if (cancel.aborted || !mayAttempt()) return [];
+      const confirmed = await this.#options.patch(part, cancel, () => {
+        if (cancel.aborted || !mayAttempt()) return false;
+        this.#partFloor = { id, sessionID: user.sessionID, messageID: user.messageID };
+        for (const item of batch) { this.#remove(item); item.attempted = true; }
+      });
+      if (confirmed === false) return [];
+      if (confirmed?.id !== part.id || confirmed.sessionID !== part.sessionID || confirmed.messageID !== part.messageID || confirmed.type !== "text" || confirmed.text !== part.text) throw new Error("native input part response was not confirmed");
+      return [confirmed];
+    })().then(resolve, reject).finally(() => {
+      this.#active = undefined;
+      if (this.#idleDemand && !this.#closed && this.#queue.length) void this.idle().catch((error) => this.#options.report?.(error));
+    });
+    return task;
   }
 
   #drain(signal) {
@@ -115,6 +160,7 @@ export class NativeDelivery {
 
   async dispose() {
     this.#closed = true;
+    this.#partFloor = undefined;
     for (const item of [...this.#queue]) this.#remove(item);
     await Promise.allSettled(this.#active ? [this.#active] : []);
   }

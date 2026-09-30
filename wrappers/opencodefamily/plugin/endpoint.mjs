@@ -25,10 +25,12 @@ export class InteractiveEndpoint {
   #work = 0;
   #bytes = 0;
   #action;
+  #nativeInput;
   #listening;
 
-  constructor(path, action) {
+  constructor(path, action, nativeInput) {
     this.#action = action;
+    this.#nativeInput = nativeInput;
     this.#server = net.createServer((socket) => {
       if (this.#closed || this.#connections.size >= bridgeLimits.connections) { socket.destroy(); return; }
       const connection = new EndpointConnection(socket, this);
@@ -62,6 +64,12 @@ export class InteractiveEndpoint {
     if (!object(native) || Object.keys(native).length !== 2 || !nativeID(native.session_id, "ses_") || !nativeID(native.message_id, "msg_")) throw new Error(`native ${nativeProduct.label} tool identity is missing or malformed`);
     if (signal.aborted) throw signal.reason;
     return this.#action(args.action, args.arguments, { sessionID: native.session_id, messageID: native.message_id, signal });
+  }
+
+  nativeInput(params, signal) {
+    if (!this.#nativeInput || !["bind", "step"].includes(params?.operation)) throw Object.assign(new Error("Method not found"), { code: -32601 });
+    if (signal.aborted) throw signal.reason;
+    return this.#nativeInput(params, signal);
   }
 
   dispose() {
@@ -173,6 +181,10 @@ class EndpointConnection {
         case "tools/call":
           try { result = { content: [{ type: "text", text: JSON.stringify(await this.#endpoint.call(request.params, controller.signal)) ?? "{}" }] }; }
           catch (cause) { result = errorResult(cause); }
+          break;
+        case "sessionbus/native-input":
+          try { result = await this.#endpoint.nativeInput(request.params, controller.signal); }
+          catch (cause) { error = { code: Number.isInteger(cause?.code) ? cause.code : -32603, message: String(cause?.message || cause) }; }
           break;
         default: error = { code: -32601, message: "Method not found" };
       }

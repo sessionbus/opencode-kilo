@@ -6,6 +6,7 @@ import { launchEnvironment, interactiveActivation } from "./activation.mjs";
 import { ReadyGate } from "./gate.mjs";
 import { waitForEndpoint } from "./readiness.mjs";
 import { SessionbusForwarder, bridgeLimits } from "./forward.mjs";
+import { inputHooks } from "./native-input.mjs";
 
 export function createServer(environment = launchEnvironment) {
   let instances = 0, calls = 0;
@@ -28,9 +29,20 @@ export function createServer(environment = launchEnvironment) {
       await forward.ready(lifetime.signal);
       ready.settle(undefined, forward);
     })().catch((error) => ready.settle(error));
+    const input = inputHooks((parameters, signal) => {
+      if (lifetime.signal.aborted) throw lifetime.signal.reason;
+      if (calls >= bridgeLimits.work) throw new Error("Sessionbus native hook work limit reached");
+      calls++;
+      const operation = ready.wait(signal).then((client) => client.nativeInput(parameters, signal))
+        .finally(() => { calls--; ownedCalls.delete(operation); });
+      ownedCalls.add(operation);
+      return operation;
+    }, lifetime.signal);
     // Constructor never waits for TUI listen/initialize or calls native HTTP:
     // quiet resume validation may need this server before TUI plugins start.
     return {
+      "chat.message": input["chat.message"],
+      "experimental.chat.messages.transform": input["experimental.chat.messages.transform"],
       // Native shell paths merge process.env before this projection (or use
       // extendEnv). Empty strings override inherited values: daemon discovery
       // becomes enabled and the optional configured-parent watchdog is inactive.
@@ -63,6 +75,7 @@ export function createServer(environment = launchEnvironment) {
       dispose: () => {
         if (disposing) return disposing;
         lifetime.abort(new Error("native server plugin disposed"));
+        input.clear();
         ready.settle(lifetime.signal.reason);
         disposing = (async () => {
           await starting;

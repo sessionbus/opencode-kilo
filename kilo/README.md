@@ -65,13 +65,24 @@ session/message context. Navigation does not evict prior owners. Native deletion
 or TUI disposal withdraws them. The initial name belongs only to the first route
 selection, with native title confirmation; later titles remain native-owned.
 
-Interactive inbound messages wait while native work, questions or permissions are
-pending. Initial native blocker snapshots and live events are checked for the
-exact session. The wrapper never answers or rejects an interactive blocker. An
-idle handoff uses native `prompt_async` without inventing a message ID. A new
+Busy interactive and lane input uses the installed legacy engine's experimental
+`experimental.chat.messages.transform` hook at a model-step boundary. One FIFO
+prefix becomes an attributed text part on the exact current user message;
+authored parts and the active task are preserved. The confirmed part is appended
+once to that step's model context. History retains the extra part, not a separate
+user message. The hook bypasses prompt intake and does not dismiss questions or
+permissions. Persistence/context assembly is admission, not proof of model
+reaction. Missing or unusable integration is a failure, not BUSY-MID acceptance.
+
+An already-idle interactive input or never-attempted leftover uses native
+`prompt_async` without inventing a message ID. Initial native blocker snapshots
+and live events are checked for the exact session. The wrapper never answers or
+rejects an interactive blocker. A new
 blocker can cross the final check and native submission; the API supplies no
 atomic check-and-submit. `written` records successful native handoff/API acceptance, not proof
-of model consumption. There is no replay or restart recovery.
+of model consumption. Attempted or uncertain handoffs are never replayed;
+there is no restart recovery. See the
+[behavior and regression map](../docs/migration/BUSY-MID-REGRESSION-MAP.md).
 
 On the installed 7.6.2 build, KIW924E is an independently reviewed clean
 original PASS for an interactive idle wake, with an operator-attested reply.
@@ -94,10 +105,19 @@ for the cell scope, earlier FAILs and the observed update notice.
 Public spawn selects product `kilo-peer`. One Worker Caller owns lane capability;
 native child tools must prove the adopted session or native parent ancestry.
 A Run uses the legacy synchronous native message request, reconciles native
-assistant history, and has no wrapper silence deadline. Every lane delivery is
-refused before native submission; the daemon starts or schedules an automatic
-managed Run carrying the original message. `queued_for_next_turn` is bounded
-daemon scheduling, not native admission. Interactive and lane
+assistant history, and has no wrapper silence deadline. Active delivery admits
+bounded FIFO ownership immediately; it does not wait for a hook or native HTTP.
+`queued_for_next_turn` is an admission receipt, not model reaction. A delivery
+after atomic Run-admission closure is refused before any queue/native effect,
+letting the daemon wake another Run. Never-attempted input crossing the last
+step may start a synchronous successor in the same Worker Run. The final result
+includes its last owned native operation. A preexisting or observed blocker
+prevents successor POST and retains bounded never-attempted input until a native
+event or cancellation. The final check is not an atomic native lease: an external
+same-root command can open a question after it and ordinary Kilo POST can
+dismiss that question. This retains the released idle fallback's native
+check-to-invocation limitation; it is not permission to dismiss blockers or a
+blocker-preservation claim. Interactive and lane
 permission behavior differs: unattended lane questions/permissions are rejected
 under the selected lane contract. Omitted or `default` permission mode inherits
 native policy. Explicit `permission_mode=bypassPermissions` supplies the native

@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,7 +35,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 func fakePart(session, id, kind, text string) json.RawMessage {
-	b, _ := json.Marshal(map[string]any{"sessionID": session, "messageID": id, "type": kind, "text": text})
+	b, _ := json.Marshal(map[string]any{"id": "prt_authored_" + id + "_" + kind, "sessionID": session, "messageID": id, "type": kind, "text": text})
 	return b
 }
 func fakeNativeHTTP() {
@@ -73,11 +74,13 @@ func fakeNativeHTTP() {
 	var history []withParts
 	var aborts int
 	var rejections int
-	var creates, loads, patches, deletes int
+	var creates, loads, patches, deletes, inputPatches, phaseStarts int
+	successorStarted := make(chan struct{})
 	var hold chan struct{}
 	var interrupted bool
 	var permission any
-	var holdProjection, ackAfterTerminal bool
+	var holdProjection, ackAfterTerminal, heldFinalProjection bool
+	projectionRelease := make(chan struct{})
 	terminalWritten := make(chan struct{})
 	projectionStarted := make(chan struct{})
 	var projectionOnce sync.Once
@@ -162,11 +165,20 @@ func fakeNativeHTTP() {
 			mu.Lock()
 			copy := append([]withParts{}, history...)
 			held := holdProjection
+			finalProjection := heldFinalProjection
 			mu.Unlock()
 			if held {
 				projectionOnce.Do(func() { close(projectionStarted) })
-				<-r.Context().Done()
-				return
+				if finalProjection {
+					select {
+					case <-projectionRelease:
+					case <-r.Context().Done():
+						return
+					}
+				} else {
+					<-r.Context().Done()
+					return
+				}
 			}
 			if os.Getenv("OPENCODE_TEST_SUMMARY") == "history" {
 				reply(reviewSummaryHistory(copy))
@@ -190,7 +202,8 @@ func fakeNativeHTTP() {
 			user := withParts{Info: nativeInfo{ID: req.MessageID, SessionID: id, Role: "user"}, Parts: []json.RawMessage{fakePart(id, req.MessageID, "text", text)}}
 			mu.Lock()
 			history = append(history, user)
-			holdProjection = text == "projection-held"
+			heldFinalProjection = text == "hold-final-empty"
+			holdProjection = text == "projection-held" || heldFinalProjection
 			ackAfterTerminal = text == "hold-permission-denied"
 			mu.Unlock()
 			if mode := os.Getenv("OPENCODE_TEST_SUMMARY"); mode == "event-user" {
@@ -207,6 +220,10 @@ func fakeNativeHTTP() {
 			interrupted = false
 			hold = make(chan struct{})
 			gate := hold
+			phaseStarts++
+			if phaseStarts == 2 {
+				close(successorStarted)
+			}
 			mu.Unlock()
 			emit("session.status", map[string]any{"sessionID": id, "status": map[string]string{"type": "busy"}})
 			startOnce.Do(func() { close(started) })
@@ -220,7 +237,7 @@ func fakeNativeHTTP() {
 			if text == "hold-question" || strings.HasPrefix(text, "review-plan-") {
 				emit("question.asked", map[string]any{"id": "que_fixture", "sessionID": id, "questions": []any{}})
 			}
-			if strings.HasPrefix(text, "hold") || strings.HasPrefix(text, "review-plan-") {
+			if strings.HasPrefix(text, "hold") || strings.HasPrefix(text, "review-plan-") || strings.Contains(text, "SUCCESSOR_HOLD") {
 				select {
 				case <-gate:
 				case <-r.Context().Done():
@@ -337,6 +354,43 @@ func fakeNativeHTTP() {
 				}
 			}
 			reply(true)
+		case r.Method == "PATCH" && strings.HasPrefix(r.URL.Path, "/session/"+id+"/message/") && strings.Contains(r.URL.Path, "/part/"):
+			var part nativeTextPart
+			if json.NewDecoder(r.Body).Decode(&part) != nil || r.URL.Path != sessionPath(part.SessionID)+"/message/"+part.MessageID+"/part/"+part.ID {
+				http.Error(w, "wrong part tuple", 400)
+				return
+			}
+			mu.Lock()
+			found := false
+			for i := range history {
+				if history[i].Info.ID == part.MessageID && history[i].Info.Role == "user" {
+					raw, _ := json.Marshal(part)
+					history[i].Parts = append(history[i].Parts, raw)
+					sort.Slice(history[i].Parts, func(a, b int) bool {
+						var left, right nativeTextPart
+						_ = json.Unmarshal(history[i].Parts[a], &left)
+						_ = json.Unmarshal(history[i].Parts[b], &right)
+						return left.ID < right.ID // native SQLite BINARY projection
+					})
+					found = true
+					inputPatches++
+					break
+				}
+			}
+			mu.Unlock()
+			if !found {
+				http.Error(w, "missing parent", 404)
+				return
+			}
+			reply(part)
+		case r.URL.Path == "/question" || r.URL.Path == "/permission":
+			reply([]any{})
+		case r.URL.Path == "/fixture/successor-started":
+			select {
+			case <-successorStarted:
+				reply(true)
+			case <-r.Context().Done():
+			}
 		case r.URL.Path == "/fixture/term":
 			select {
 			case <-termSeen:
@@ -348,6 +402,9 @@ func fakeNativeHTTP() {
 			_, _ = io.WriteString(w, "true")
 			w.(http.Flusher).Flush()
 			closeReleaseOnce.Do(func() { close(closeRelease) })
+		case r.URL.Path == "/fixture/projection-release":
+			close(projectionRelease)
+			reply(true)
 		case r.URL.Path == "/fixture/projection-pending":
 			select {
 			case <-projectionStarted:
@@ -375,7 +432,7 @@ func fakeNativeHTTP() {
 			reply(true)
 		case r.URL.Path == "/fixture/state":
 			mu.Lock()
-			reply(map[string]any{"aborts": aborts, "messages": history, "permission": permission, "rejections": rejections, "creates": creates, "loads": loads, "patches": patches, "deletes": deletes})
+			reply(map[string]any{"aborts": aborts, "messages": history, "permission": permission, "rejections": rejections, "creates": creates, "loads": loads, "patches": patches, "deletes": deletes, "inputPatches": inputPatches, "phaseStarts": phaseStarts})
 			mu.Unlock()
 		default:
 			http.Error(w, r.URL.Path, 404)
@@ -700,9 +757,9 @@ func TestLegacyWorkerTerminalWhileSeedReportHeldAndBusLoss(t *testing.T) {
 			f.p.mu.Lock()
 			run := f.p.active
 			f.p.mu.Unlock()
-			<-run.original.done
-			if run.original.err != nil {
-				t.Fatal(run.original.err)
+			<-run.phase.original.done
+			if run.phase.original.err != nil {
+				t.Fatal(run.phase.original.err)
 			}
 			select {
 			case <-run.run.Done():

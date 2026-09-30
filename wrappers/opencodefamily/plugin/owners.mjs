@@ -5,6 +5,8 @@ import { validate } from "@sessionbus/kit";
 import { OwnedPeer } from "./peer.mjs";
 import { NativeDelivery, deliveryLimits } from "./delivery.mjs";
 import { ReadyGate } from "./gate.mjs";
+import { randomBytes } from "node:crypto";
+import { inputRequest, compareUsers } from "./native-input.mjs";
 
 export const ownerLimits = Object.freeze({ owners: 128, establishing: 16, http: 256 });
 const object = (value) => value && typeof value === "object" && !Array.isArray(value);
@@ -62,6 +64,8 @@ export class NativeOwners {
       }
       record.status = status;
       record.statusRevision++;
+      if (status === "idle") record.idleEpoch++;
+      if (record.input && status !== "idle") record.input.activeSeen = true;
       // Only an idle observed after the assistant's completion follows the
       // native Runner's removal; the halt's earlier idle does not settle it.
       if (status === "idle" && nativeProduct.terminalHandoff) record.settled = record.completed;
@@ -77,16 +81,25 @@ export class NativeOwners {
         }));
       }
     }
-    if (nativeProduct.terminalHandoff) {
-      this.#unsub.push(api.event.on("message.updated", (event) => {
-        const info = event.properties.info, record = object(info) && info.role === "assistant" && this.#owners.get(info.sessionID);
-        if (!record || typeof info.id !== "string") return;
-        // Marks only. Native updates only its active assistant, and cleanup
-        // publishes time.completed while the old Runner is still installed.
+    this.#unsub.push(api.event.on("message.updated", (event) => {
+      const info = event.properties.info, record = object(info) && info.role === "assistant" && this.#owners.get(info.sessionID);
+      if (!record || typeof info.id !== "string") return;
+      // Marks only. Native updates only its active assistant, and cleanup
+      // publishes time.completed while the old Runner is still installed.
+      if (nativeProduct.terminalHandoff) {
         record.assistant = info.id;
         if (typeof info.time?.completed === "number") record.completed = info.id;
-      }));
-    }
+      }
+      if (record.input && !info.summary && info.parentID === record.input.anchor.messageID) record.input.assistant = info.id;
+    }));
+    this.#unsub.push(api.event.on("message.part.updated", (event) => {
+      const part = event.properties.part, record = object(part) && this.#owners.get(part.sessionID), binding = record?.input;
+      // Static/subtask/summary assistants are not negative capability evidence.
+      // Native awaits transform before processing this exact model step.
+      if (part?.type !== "step-start" || !binding || part.messageID !== binding.assistant || binding.stepSeen) return;
+      const error = new Error(`${nativeProduct.label}: Sessionbus did not observe the expected input hook for this model step`);
+      try { this.#report(error); } catch { /* Reporting cannot change delivery ownership. */ }
+    }));
   }
 
   #report(error) { (this.#options.report || ((cause) => console.error(`sessionbus: ${cause?.message || cause}`)))(error); }
@@ -117,7 +130,7 @@ export class NativeOwners {
       // Native offers no atomic check-and-submit operation: a new blocker may
       // still cross this handoff. Never answer/reject a blocker ourselves.
       if (method === "promptAsync" && nativeProduct.blockers && !this.#unblocked(record)) return false;
-      submitted?.();
+      if (submitted?.() === false) return false;
       // The managed launcher selects real native fetch. SDK parsing allocation
       // belongs to native; this bounds concurrent operations, not that parser.
       const [group, operation] = method.includes(".") ? method.split(".") : ["session", method];
@@ -147,7 +160,11 @@ export class NativeOwners {
     // Native SessionStatus.list omits idle entries. Events arriving during the
     // query take precedence over its snapshot; no local missing-state default.
     if (!["idle", "busy", "retry"].includes(status)) throw new Error(`${nativeProduct.label} session status is malformed`);
-    if (revision === record.statusRevision) record.status = status;
+    if (revision === record.statusRevision) {
+      if (status === "idle") record.idleEpoch++;
+      record.status = status;
+    }
+    if (record.input && record.status !== "idle") record.input.activeSeen = true;
     return record.status;
   }
 
@@ -222,7 +239,7 @@ export class NativeOwners {
     const existing = this.#owners.get(id);
     if (existing) return existing;
     if (this.#records.size >= ownerLimits.owners || this.#pending >= ownerLimits.establishing) throw new Error("Sessionbus native owner limit reached");
-    const record = { id, controller: new AbortController(), gate: new ReadyGate(), revision: 0, statusRevision: 0, ...(nativeProduct.blockers ? { blockerEpoch: {} } : {}) };
+    const record = { id, controller: new AbortController(), gate: new ReadyGate(), revision: 0, statusRevision: 0, idleEpoch: 0, ...(nativeProduct.blockers ? { blockerEpoch: {} } : {}) };
     this.#owners.set(id, record);
     this.#records.add(record);
     this.#pending++;
@@ -236,6 +253,7 @@ export class NativeOwners {
             : nativeProduct.terminalHandoff ? this.#terminalStatus(record, signal) : this.#status(record, signal),
           ...(nativeProduct.blockers ? { maySubmit: () => this.#unblocked(record) } : {}), info: (signal) => this.#get(record, signal),
           submit: (params, signal, submitted) => this.#native(record, "promptAsync", params, signal, submitted),
+          patch: (part, signal, submitted) => this.#native(record, "part.update", { sessionID: id, messageID: part.messageID, partID: part.id, part, directory: record.info.directory }, signal, submitted),
           reserve: (bytes) => { if (this.#bytes + bytes > deliveryLimits.totalBytes) return false; this.#bytes += bytes; return true; },
           release: (bytes) => { this.#bytes -= bytes; },
         });
@@ -285,6 +303,36 @@ export class NativeOwners {
     await record.gate.wait(context.signal);
     this.#check(record);
     return record.peer.action(action, args, context.signal);
+  }
+
+  async nativeInput(parameters, signal) {
+    const request = inputRequest(parameters), record = this.#owners.get(request.sessionID);
+    // Tools may establish an exact child owner; hooks may only use an already
+    // owned context. Same-process native hooks supply the admitted chat tuple
+    // before persistence; the existing record/generation owns its opaque token.
+    // Public tool ancestry and caller parameters never create inbox ownership.
+    const empty = () => request.operation === "bind" ? { token: null } : { parts: [] };
+    if (!record || record.controller.signal.aborted) return empty();
+    const idleEpoch = record.idleEpoch;
+    await record.gate.wait(signal);
+    this.#check(record);
+    if (signal.aborted) throw signal.reason;
+    if (request.operation === "bind") {
+      if (record.input && compareUsers(request, record.input.anchor) < 0) return empty();
+      if (record.input && compareUsers(request, record.input.anchor) === 0) return { token: record.input.token };
+      record.input = { anchor: request, token: `input_${randomBytes(16).toString("hex")}`, statusRevision: record.statusRevision, activeSeen: record.status !== "idle" };
+      return { token: record.input.token };
+    }
+    const binding = record.input;
+    // A hook may reach this endpoint before the first busy event. Once this
+    // binding sees busy, an idle observation refuses a late pre-attempt hook.
+    // This is existing native status evidence, not an atomic abort guarantee.
+    const valid = () => !record.controller.signal.aborted && this.#owners.get(record.id) === record && record.input === binding && request.token === binding?.token && compareUsers(request, binding.anchor) >= 0
+      && record.idleEpoch === idleEpoch && (record.status !== "idle" || !binding.activeSeen && record.statusRevision === binding.statusRevision);
+    if (!valid()) return empty();
+    binding.stepSeen = true; // An empty-FIFO hook still proves this integration.
+    const parts = await record.delivery.step(signal, request, valid);
+    return { parts };
   }
 
   async select(id) {

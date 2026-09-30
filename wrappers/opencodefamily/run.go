@@ -16,13 +16,31 @@ import (
 type laneRun struct {
 	run       *kit.Run
 	initial   string
-	original  *httpOperation
-	started   chan struct{}
-	startOnce sync.Once
-	userSeen  bool
-	count     int
-	interrupt *nativeInterrupt
-	rejects   []*nativeInterrupt // wrapper permission rejections issued in this Run
+	phase     *lanePhase
+	admission bool
+	stopping  bool
+	queue     []*laneInput
+	bytes     int
+	changed   chan struct{}
+}
+
+type lanePhase struct {
+	initial    string
+	ctx        context.Context
+	cancel     context.CancelFunc
+	sealed     bool
+	bound      *nativeInputRequest
+	stepSeen   bool
+	hooks      sync.WaitGroup
+	claim      bool
+	partID     string // last attempted additive part, including uncertain responses
+	partParent string
+	original   *httpOperation
+	started    chan struct{}
+	startOnce  sync.Once
+	userSeen   bool
+	interrupt  *nativeInterrupt
+	rejects    []*nativeInterrupt // wrapper permission rejections issued in this Run
 }
 type nativeInterrupt struct {
 	done chan struct{}
@@ -85,15 +103,18 @@ func (p *Wrapper) executeRun(ctx context.Context, run *kit.Run, input kit.RunInp
 		p.mu.Unlock()
 		return kit.TurnResult{}, errors.Join(err, ctx.Err())
 	}
-	t := &laneRun{run: run, initial: id, started: make(chan struct{}), count: 1}
+	phaseCtx, phaseCancel := context.WithCancel(p.ctx)
+	phase := &lanePhase{initial: id, started: make(chan struct{}), ctx: phaseCtx, cancel: phaseCancel}
+	t := &laneRun{run: run, initial: id, phase: phase, admission: true, changed: make(chan struct{})}
 	p.run, p.active = run, t
 	op, err := p.client.begin(request, 200)
 	if err != nil {
 		p.run, p.active = nil, nil
+		phaseCancel()
 		p.mu.Unlock()
 		return kit.TurnResult{}, err
 	}
-	t.original = op
+	phase.original = op
 	p.mu.Unlock()
 	// SDK admission is ordering of our owned operation, not native consumption.
 	run.Admitted()
@@ -101,6 +122,8 @@ func (p *Wrapper) executeRun(ctx context.Context, run *kit.Run, input kit.RunInp
 	defer stop()
 	defer func() {
 		p.mu.Lock()
+		t.admission = false
+		t.queue, t.bytes = nil, 0
 		if p.active == t {
 			p.active = nil
 		}
@@ -133,24 +156,45 @@ func (p *Wrapper) executeRun(ctx context.Context, run *kit.Run, input kit.RunInp
 			p.fail(receiptErr)
 		}
 	}
-	raw, err := op.wait()
-	p.mu.Lock()
-	interrupt, rejects := t.interrupt, t.rejects
-	p.mu.Unlock()
-	if interrupt != nil {
-		<-interrupt.done
-		if interrupt.err != nil {
-			p.fail(interrupt.err)
-			err = errors.Join(err, interrupt.err)
+	for {
+		raw, err := phase.original.wait()
+		p.mu.Lock()
+		phase.sealed = true
+		phase.cancel()
+		interrupt, rejects := phase.interrupt, phase.rejects
+		p.mu.Unlock()
+		phase.hooks.Wait()
+		if interrupt != nil {
+			<-interrupt.done
+			if interrupt.err != nil {
+				p.fail(interrupt.err)
+				err = errors.Join(err, interrupt.err)
+			}
 		}
+		// Join the rejections issued before this terminal returned; a later one
+		// cannot have ended it. A failed rejection has already failed the owner.
+		rejected := false
+		for _, r := range rejects {
+			<-r.done
+			rejected = rejected || r.ack
+		}
+		result, terminalErr := p.phaseResult(t.initial, raw, err, interrupt, rejected)
+		if terminalErr != nil {
+			return kit.TurnResult{}, terminalErr
+		}
+		next, nextErr := p.successor(ctx, t, result)
+		if nextErr != nil {
+			p.fail(nextErr)
+			return kit.TurnResult{}, nextErr
+		}
+		if next == nil {
+			return result, nil
+		}
+		phase = next
 	}
-	// Join the rejections issued before this terminal returned; a later one
-	// cannot have ended it. A failed rejection has already failed the owner.
-	rejected := false
-	for _, r := range rejects {
-		<-r.done
-		rejected = rejected || r.ack
-	}
+}
+
+func (p *Wrapper) phaseResult(initial string, raw []byte, err error, interrupt *nativeInterrupt, rejected bool) (kit.TurnResult, error) {
 	if err != nil {
 		p.fail(err)
 		return kit.TurnResult{}, err
@@ -164,7 +208,7 @@ func (p *Wrapper) executeRun(ctx context.Context, run *kit.Run, input kit.RunInp
 		p.fail(err)
 		return kit.TurnResult{}, err
 	}
-	projection, err := p.client.projectHistory(p.ctx, p.id, id, final)
+	projection, err := p.client.projectHistory(p.ctx, p.id, initial, final)
 	if err != nil {
 		// Native cancel's lastAssistant fallback can predate the admitted input.
 		// Only that exact stale-result condition permits empty interrupted output.
@@ -268,23 +312,33 @@ func hasNativeToolCalls(final withParts) (bool, error) {
 func (p *Wrapper) ensureInterrupt(t *laneRun) *nativeInterrupt {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if t.interrupt != nil {
-		return t.interrupt
+	t.admission, t.stopping = false, true
+	t.queue, t.bytes = nil, 0
+	close(t.changed)
+	t.changed = make(chan struct{})
+	phase := t.phase
+	if phase.interrupt != nil {
+		return phase.interrupt
 	}
 	op := &nativeInterrupt{done: make(chan struct{})}
-	t.interrupt = op
+	phase.interrupt = op
+	if phase.original == nil {
+		op.ack = true
+		close(op.done)
+		return op
+	}
 	go func() {
 		defer close(op.done)
 		select {
-		case <-t.original.done:
+		case <-phase.original.done:
 			return
-		case <-t.started:
+		case <-phase.started:
 		case <-p.ctx.Done():
 			op.err = context.Cause(p.ctx)
 			return
 		}
 		select {
-		case <-t.original.done:
+		case <-phase.original.done:
 			return
 		default:
 		}
@@ -328,21 +382,30 @@ func (p *Wrapper) Interrupt(ctx context.Context, run *kit.Run) error {
 		return ctx.Err()
 	}
 }
-func (p *Wrapper) Deliver(ctx context.Context, request kit.DeliveryRequest, _ *kit.Run) (kit.DeliveryReceipt, error) {
+func (p *Wrapper) Deliver(ctx context.Context, request kit.DeliveryRequest, run *kit.Run) (kit.DeliveryReceipt, error) {
 	text, err := host.RenderNativeMessage(request)
 	if err != nil {
 		return kit.DeliveryReceipt{}, err
 	}
-	if len(text) > maxNativeRequest {
-		return kit.DeliveryReceipt{Disposition: "rejected", Reason: "message_too_large"}, nil
+	encoded, err := json.Marshal(map[string]string{"text": text})
+	if err != nil {
+		return kit.DeliveryReceipt{}, err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	t := p.active
+	if t == nil || run == nil || t.run != run || !t.admission || t.stopping || !p.opened || p.closing || p.ctx.Err() != nil || run.Interrupted() {
+		return kit.DeliveryReceipt{}, host.NotRunning()
 	}
 	if ctx.Err() != nil {
 		return kit.DeliveryReceipt{}, ctx.Err()
 	}
-	// OpenCode's noReply route persists history without entering the native
-	// loop, and Kilo has no active append route. Refuse before either native
-	// write; the daemon retains the original delivery and wakes a fresh run.
-	return kit.DeliveryReceipt{}, host.NotRunning()
+	if len(encoded)+1024 > maxNativeRequest || len(t.queue) >= 64 || t.bytes+len(text) > maxNativeRequest {
+		return kit.DeliveryReceipt{Disposition: "rejected", Reason: "Sessionbus unsent input limit reached"}, nil
+	}
+	t.queue = append(t.queue, &laneInput{text: text})
+	t.bytes += len(text)
+	return kit.DeliveryReceipt{Disposition: "queued_for_next_turn"}, nil
 }
 func (p *Wrapper) observe(raw []byte) error {
 	var e struct {
@@ -355,7 +418,7 @@ func (p *Wrapper) observe(raw []byte) error {
 	// Other native events have their own payloads. Decode only the variants
 	// used by this owner, after discriminating the event type.
 	switch e.Type {
-	case "message.updated", "session.created", "session.updated", "session.deleted", "session.status", "permission.asked", "question.asked":
+	case "message.updated", "session.created", "session.updated", "session.deleted", "session.status", "permission.asked", "permission.replied", "question.asked", "question.replied", "question.rejected":
 	default:
 		return nil
 	}
@@ -393,12 +456,21 @@ func (p *Wrapper) observe(raw []byte) error {
 	p.mu.Lock()
 	t := p.active
 	id := p.id
+	var phase *lanePhase
 	if t != nil {
-		if e.Type == "message.updated" && info.SessionID == id && info.ID == t.initial && info.Role == "user" {
-			t.userSeen = true
+		phase = t.phase
+		if e.Type == "message.updated" && info.SessionID == id && info.ID == phase.initial && info.Role == "user" {
+			phase.userSeen = true
 		}
-		if e.Type == "session.status" && properties.SessionID == id && properties.Status.Type == "busy" && t.userSeen {
-			t.startOnce.Do(func() { close(t.started) })
+		if e.Type == "session.status" && properties.SessionID == id && properties.Status.Type == "busy" && phase.userSeen {
+			phase.startOnce.Do(func() { close(phase.started) })
+		}
+	}
+	if properties.SessionID == id && (strings.HasPrefix(e.Type, "permission.") || strings.HasPrefix(e.Type, "question.")) {
+		p.blockerEpoch++
+		if t != nil {
+			close(t.changed)
+			t.changed = make(chan struct{})
 		}
 	}
 	p.mu.Unlock()
@@ -422,7 +494,9 @@ func (p *Wrapper) observe(raw []byte) error {
 	if e.Type == "permission.asked" && t != nil {
 		rejection = &nativeInterrupt{done: make(chan struct{})}
 		p.mu.Lock()
-		t.rejects = append(t.rejects, rejection)
+		if !phase.sealed {
+			phase.rejects = append(phase.rejects, rejection)
+		}
 		p.mu.Unlock()
 	}
 	p.workers.Add(1)
