@@ -44,7 +44,8 @@ export function createTui(environment = launchEnvironment, dependencies = {}) {
       const solid = dependencies.solid || await import("solid-js");
       check();
       owners = new NativeOwners(api, launch, { report });
-      endpoint = new InteractiveEndpoint(path.join(launch.directory, "actions.sock"), (action, args, context) => owners.action(action, args, context));
+      endpoint = new InteractiveEndpoint(path.join(launch.directory, "actions.sock"), (action, args, context) => owners.action(action, args, context),
+        (params, signal) => owners.nativeInput(params, signal));
       await endpoint.ready();
       check();
       await publishEndpoint(launch.directory);

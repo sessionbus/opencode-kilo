@@ -17,7 +17,7 @@ var runtimeFiles = []string{
 var testFiles = []string{
 	"delivery.test.mjs", "endpoint.test.mjs", "forward.test.mjs", "owners.test.mjs",
 	"peer.test.mjs", "readiness.test.mjs", "readiness-fixture.mjs", "server.test.mjs", "tui.test.mjs",
-	"review-delivery-idle.test.mjs", "review-delivery-receipt.test.mjs", "forward-fixture.mjs",
+	"review-delivery-idle.test.mjs", "review-delivery-receipt.test.mjs", "forward-fixture.mjs", "busy-handoff.test.mjs",
 }
 
 // Stage copies the fixed product payload into an empty destination. Tests adds

@@ -3,7 +3,7 @@ import { nativeProduct } from "./profile.mjs";
 
 import { validate } from "@sessionbus/kit";
 import { OwnedPeer } from "./peer.mjs";
-import { NativeDelivery, deliveryLimits } from "./delivery.mjs";
+import { NativeDelivery, deliveryLimits, nextPartID } from "./delivery.mjs";
 import { ReadyGate } from "./gate.mjs";
 
 export const ownerLimits = Object.freeze({ owners: 128, establishing: 16, http: 256 });
@@ -285,6 +285,21 @@ export class NativeOwners {
     await record.gate.wait(context.signal);
     this.#check(record);
     return record.peer.action(action, args, context.signal);
+  }
+
+  // Busy handoff from the native model-step hook. Only an established owner of
+  // this exact native session hands off; otherwise its input stays queued.
+  async nativeInput(params, signal) {
+    if (!object(params) || !nativeID(params.sessionID) || typeof params.messageID !== "string" || !params.messageID.startsWith("msg_") || Buffer.byteLength(params.messageID) > 256 || /[\s\0]/u.test(params.messageID)) throw new Error("invalid native input request");
+    const record = this.#owners.get(params.sessionID);
+    const partID = nextPartID(params.after);
+    if (!record?.delivery || record.controller.signal.aborted || !partID) return { parts: [] };
+    const part = await record.delivery.take(signal, async (text, cancel, started) => {
+      const value = { id: partID, sessionID: record.id, messageID: params.messageID, type: "text", text };
+      await this.#native(record, "part.update", { sessionID: record.id, messageID: params.messageID, partID, directory: record.info.directory, part: value }, cancel, started);
+      return value;
+    });
+    return { parts: part ? [part] : [] };
   }
 
   async select(id) {
