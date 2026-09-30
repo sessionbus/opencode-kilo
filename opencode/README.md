@@ -84,17 +84,31 @@ returned run explicitly. `list.self_info`, when supplied by the daemon, identifi
 the caller even if filters exclude its row. Older daemons may omit it; names
 and row ordering are not identity fallbacks.
 
-Interactive delivery keeps bounded unsent input while native status is busy.
-Input queued while busy is handed off only after the active assistant's native
-completion and the native idle that follows it; a halted turn's earlier idle is
-not enough. Input arriving while idle is handed off directly. Limitation: if
+Interactive and lane delivery keep bounded unsent input while native work is
+busy. The installed legacy engine's experimental
+`experimental.chat.messages.transform` hook admits a FIFO prefix at the next
+model step. The wrapper persists one attributed text part on the exact current
+user message and appends the confirmed part to that step's model context.
+Authored text, the native task, and sender/message identities are preserved;
+the history representation is an extra part, not a separate user message.
+Persistence and context assembly do not prove that the model consumed or
+reacted to the input. Missing or unusable integration is a failure, not a
+BUSY-MID acceptance claim.
+
+Input arriving while idle is handed off directly. Only never-attempted
+interactive leftovers use the active assistant's native completion and the
+native idle that follows it; a halted turn's earlier idle is not enough. If
 the owner saw no assistant event for that turn (attached mid-step or missed
 events), a latest operator or native user message, or an already completed
 assistant, cannot be correlated with the idle, which then hands off best
 effort. A confirmed native handoff is `written`, not proof of model consumption
-in that turn. Attempted input is never replayed after an uncertain response,
+in that turn. A lane retains one Worker Run; never-attempted input crossing the
+last step can start a synchronous successor inside that Run, whose final
+result includes the last owned native operation. Attempted input is never
+replayed after an uncertain response,
 cancellation or terminal race. Native storage remains native; no wrapper
-history, result journal or restart recovery is added.
+history, result journal or restart recovery is added. See the
+[behavior and regression map](../docs/migration/BUSY-MID-REGRESSION-MAP.md).
 
 The managed launcher selects authenticated native loopback HTTP so owned
 requests can be cancelled and joined. Caller hostname/port/mDNS/CORS switches

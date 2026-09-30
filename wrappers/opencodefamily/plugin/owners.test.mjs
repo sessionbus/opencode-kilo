@@ -13,6 +13,7 @@ import { Connection } from "@sessionbus/kit";
 import { NativeOwners } from "./owners.mjs";
 import { InteractiveEndpoint } from "./endpoint.mjs";
 import { SessionbusForwarder } from "./forward.mjs";
+import { inputHooks } from "./native-input.mjs";
 
 function deferred() { let resolve; const promise = new Promise((yes) => { resolve = yes; }); return { promise, resolve }; }
 const result = (data, status = 200) => ({ data, response: { status } });
@@ -54,12 +55,12 @@ async function fixture(t, options = {}) {
       assert.equal(config.throwOnError, true); assert.equal(config.redirect, "error");
       return options.promptAsync(params, config);
     },
-  }, permission: { list: (params, config) => options.permission ? options.permission(params, config) : result([]) },
+  }, part: { update: (params, config) => options.part ? options.part(params, config) : result(params.part) }, permission: { list: (params, config) => options.permission ? options.permission(params, config) : result([]) },
     question: { list: (params, config) => options.question ? options.question(params, config) : result([]) },
   }, state: { session: {
     permission: (id) => options.livePermission?.(id) || [], question: (id) => options.liveQuestion?.(id) || [],
   } } };
-  const owners = new NativeOwners(api, { socket, groups: ["group"], name: options.name || "" }, { report: (error) => failures.push(error), peer: options.peer });
+  const owners = new NativeOwners(api, { socket, groups: ["group"], name: options.name || "" }, { report: (error) => { failures.push(error); options.report?.(error); }, peer: options.peer });
   t.after(async () => {
     await owners.dispose();
     for (const stream of sockets) stream.destroy();
@@ -517,4 +518,206 @@ test("Kilo busy-queued input still hands off on native idle without a terminal w
   const f = await busyQueued(t, halted);
   await f.idle(); await f.submitted; await f.owners.dispose();
   assert.deepEqual(f.counts, { snapshots: 0, submissions: 1 });
+});
+
+const nativeBind = (id = "ses_target", messageID = "msg_active", created = 10) => ({ operation: "bind", sessionID: id, messageID, created });
+function modelStep(f, parentID = "msg_active", summary = false) {
+  f.events.emit("message.updated", { properties: { info: { id: "msg_model", role: "assistant", sessionID: "ses_target", parentID, summary } } });
+  f.events.emit("message.part.updated", { properties: { part: { id: "prt_start", sessionID: "ses_target", messageID: "msg_model", type: "step-start" } } });
+}
+test("unobserved hook diagnostic preserves tools and later idle wake", { timeout: 5000 }, async (t) => {
+  for (const brokenReport of [false, true]) await t.test(`report failure=${brokenReport}`, async (t) => {
+    let status = "busy", prompts = 0, received;
+    const submitted = deferred();
+    const f = await fixture(t, { status: async () => result(status === "busy" ? { ses_target: { type: "busy" } } : {}),
+      promptAsync: async (params) => { prompts++; received = params; submitted.resolve(); return result(undefined, 204); },
+      report: (error) => { if (brokenReport && error.message.includes("did not observe")) throw new Error("diagnostic report failed"); },
+    });
+    const signal = new AbortController().signal;
+    await f.action("ses_target"); await f.owners.nativeInput(nativeBind(), signal);
+    await f.wires.get("ses_target").call("message.deliver", inbound("unobserved_hook"));
+    modelStep(f);
+    assert.equal(f.failures.length, 1); assert.match(f.failures[0].message, /did not observe the expected input hook/);
+    await f.action("ses_target"); assert.equal(f.sockets.size, 1); assert.equal(prompts, 0);
+    f.events.emit("message.updated", { properties: { info: { id: "msg_model", role: "assistant", sessionID: "ses_target", parentID: "msg_active", time: { completed: 20 } } } });
+    status = "idle";
+    f.events.emit("session.status", { properties: { sessionID: "ses_target", status: { type: "idle" } } });
+    await submitted.promise;
+    assert.match(received.parts[0].text, /unobserved_hook/);
+    f.events.emit("session.status", { properties: { sessionID: "ses_target", status: { type: "idle" } } });
+    await f.owners.dispose(); assert.equal(prompts, 1);
+  });
+});
+test("next valid hook drains retained input in the same task after an unobserved step", { timeout: 5000 }, async (t) => {
+  const patched = []; let status = "busy", prompts = 0;
+  const f = await fixture(t, { status: async () => result(status === "busy" ? { ses_target: { type: "busy" } } : {}),
+    part: async (params) => { patched.push(params.part); return result(params.part); },
+    promptAsync: async () => { prompts++; return result(undefined, 204); },
+  });
+  const signal = new AbortController().signal;
+  await f.action("ses_target"); const { token } = await f.owners.nativeInput(nativeBind(), signal);
+  await f.wires.get("ses_target").call("message.deliver", inbound("next_step_owned"));
+  modelStep(f);
+  assert.equal(f.failures.length, 1); assert.equal(patched.length, 0); assert.equal(prompts, 0);
+  const step = { ...nativeBind(), operation: "step", token, after: "prt_authored" };
+  const next = await f.owners.nativeInput(step, signal);
+  assert.equal(patched.length, 1); assert.match(next.parts[0].text, /next_step_owned/);
+  assert.equal(next.parts[0].messageID, "msg_active"); assert.equal(status, "busy");
+  assert.deepEqual(await f.owners.nativeInput(step, signal), { parts: [] });
+  modelStep(f); assert.equal(f.failures.length, 1);
+  status = "idle"; f.events.emit("session.status", { properties: { sessionID: "ses_target", status: { type: "idle" } } });
+  await f.owners.dispose(); assert.equal(prompts, 0); assert.equal(patched.length, 1);
+});
+test("an empty-FIFO unobserved-step diagnostic does not infer permanent delivery failure", { timeout: 5000 }, async (t) => {
+  const f = await fixture(t); await f.action("ses_target"); await f.owners.nativeInput(nativeBind(), new AbortController().signal);
+  modelStep(f);
+  assert.equal(f.failures.length, 1); assert.match(f.failures[0].message, /did not observe.*this model step/);
+  assert.doesNotMatch(f.failures[0].message, /unavailable|could not deliver messages|native input hook did not run/);
+  await f.action("ses_target"); assert.equal(f.sockets.size, 1);
+});
+test("empty hook before the first busy event proves the model-step integration", { timeout: 5000 }, async (t) => {
+  const f = await fixture(t); await f.action("ses_target"); const signal = new AbortController().signal;
+  const { token } = await f.owners.nativeInput(nativeBind(), signal);
+  assert.deepEqual(await f.owners.nativeInput({ ...nativeBind(), operation: "step", token, after: "prt_authored" }, signal), { parts: [] });
+  f.events.emit("session.status", { properties: { sessionID: "ses_target", status: { type: "busy" } } });
+  modelStep(f); await f.action("ses_target"); assert.deepEqual(f.failures, []);
+});
+test("summary, static, subtask and stale-parent evidence does not falsely retire integration", { timeout: 5000 }, async (t) => {
+  const f = await fixture(t); await f.action("ses_target"); await f.owners.nativeInput(nativeBind(), new AbortController().signal);
+  modelStep(f, "msg_active", true); // summaries are not the ordinary model witness
+  modelStep(f, "msg_old_parent");
+  for (const finish of ["stop", "tool-calls"]) f.events.emit("message.updated", { properties: { info: { id: "msg_static", sessionID: "ses_target", role: "assistant", parentID: "msg_active", finish, time: { completed: 20 } } } });
+  await f.action("ses_target"); assert.deepEqual(f.failures, []);
+});
+test("an idle then busy crossing never revives a held pre-halt step", { timeout: 5000 }, async (t) => {
+  const entered = deferred(), release = deferred(); const patched = [];
+  const f = await fixture(t, { status: async () => result({ ses_target: { type: "busy" } }), part: async (params) => {
+    patched.push(params.part); if (patched.length === 1) { entered.resolve(); await release.promise; } return result(params.part);
+  } });
+  await f.action("ses_target"); const signal = new AbortController().signal;
+  const { token } = await f.owners.nativeInput(nativeBind(), signal);
+  const step = { ...nativeBind(), operation: "step", token, after: "prt_authored" };
+  await f.wires.get("ses_target").call("message.deliver", inbound("attempted_first"));
+  const first = f.owners.nativeInput(step, signal); await entered.promise;
+  await f.wires.get("ses_target").call("message.deliver", inbound("still_unsent_second"));
+  let settled = false; const old = f.owners.nativeInput(step, signal).then((value) => { settled = true; return value; });
+  await nextTurn(); assert.equal(settled, false);
+  f.events.emit("session.status", { properties: { sessionID: "ses_target", status: { type: "idle" } } });
+  f.events.emit("session.status", { properties: { sessionID: "ses_target", status: { type: "busy" } } });
+  release.resolve(); await first; assert.deepEqual(await old, { parts: [] }); assert.equal(patched.length, 1);
+  const next = await f.owners.nativeInput(step, signal); assert.equal(patched.length, 2); assert.equal(next.parts.length, 1); assert.match(next.parts[0].text, /still_unsent_second/);
+});
+test("owned hook inserts a durable additive part during busy work on the exact session", { timeout: 5000 }, async (t) => {
+  const patched = [];
+  const f = await fixture(t, { status: async () => result({ ses_target: { type: "busy" } }),
+    part: async (params, config) => {
+      assert.equal(config.signal.aborted, false); assert.equal(params.sessionID, "ses_target");
+      assert.equal(params.messageID, "msg_active"); assert.equal(params.partID, params.part.id);
+      patched.push(structuredClone(params.part)); return result(params.part);
+    },
+    question: async () => result([{ sessionID: "ses_target" }]), permission: async () => result([{ sessionID: "ses_target" }]),
+    liveQuestion: () => [{ sessionID: "ses_target" }], livePermission: () => [{ sessionID: "ses_target" }],
+  });
+  await f.action("ses_target");
+  const signal = new AbortController().signal;
+  const hooks = inputHooks((request, cancel) => f.owners.nativeInput(request, cancel), signal);
+  const current = { info: { role: "user", sessionID: "ses_target", id: "msg_active", time: { created: 10 } },
+    parts: [{ id: "prt_authored", sessionID: "ses_target", messageID: "msg_active", type: "text", text: "authored exact bytes" }] };
+  await hooks["chat.message"]({ sessionID: "ses_target" }, { message: current.info });
+  await f.wires.get("ses_target").call("message.deliver", inbound("busy_step"));
+  await hooks["experimental.chat.messages.transform"]({}, { messages: [current] });
+  assert.equal(patched.length, 1); assert.deepEqual(current.parts.slice(1), patched); assert.match(current.parts[1].text, /busy_step/);
+  assert.equal(current.parts[0].text, "authored exact bytes");
+  await hooks["experimental.chat.messages.transform"]({}, { messages: [current] });
+  assert.equal(patched.length, 1); assert.equal(current.parts.length, 2);
+});
+
+test("late public adoption lets a child hook claim only its exact active inbox", { timeout: 5000 }, async (t) => {
+  const patched = [], requests = [];
+  const f = await fixture(t, { status: async () => result({ ses_parent: { type: "busy" }, ses_child: { type: "busy" } }),
+    part: async (params) => { patched.push(params.part); return result(params.part); },
+  });
+  await f.action("ses_parent");
+  const hooks = inputHooks((request, signal) => { requests.push(request); return f.owners.nativeInput(request, signal); }, new AbortController().signal);
+  const current = (sessionID, id) => ({ info: { role: "user", sessionID, id, time: { created: 10 } },
+    parts: [{ id: "prt_authored", sessionID, messageID: id, type: "text", text: `authored ${sessionID}` }] });
+  const child = current("ses_child", "msg_child"), unknown = current("ses_unknown", "msg_unknown");
+  await hooks["chat.message"]({ sessionID: "ses_child" }, { message: child.info });
+  await hooks["experimental.chat.messages.transform"]({}, { messages: [child] });
+  await hooks["experimental.chat.messages.transform"]({}, { messages: [unknown] });
+  assert.equal(f.wires.size, 1); assert.equal(patched.length, 0);
+  await f.action("ses_child");
+  await f.wires.get("ses_parent").call("message.deliver", inbound("parent_still_owned"));
+  await f.wires.get("ses_child").call("message.deliver", inbound("child_busy_adopted"));
+  await hooks["experimental.chat.messages.transform"]({}, { messages: [child] });
+  assert.equal(patched.length, 1); assert.equal(patched[0].sessionID, "ses_child"); assert.match(child.parts[1].text, /child_busy_adopted/);
+  assert.doesNotMatch(child.parts[1].text, /parent_still_owned/); assert.equal(child.parts[0].text, "authored ses_child");
+  f.events.emit("message.updated", { properties: { info: { id: "msg_child_assistant", role: "assistant", sessionID: "ses_child", parentID: "msg_child" } } });
+  f.events.emit("message.part.updated", { properties: { part: { sessionID: "ses_child", messageID: "msg_child_assistant", type: "step-start" } } });
+  assert.deepEqual(f.failures, []); // Late adoption is a legitimate integration.
+  const binds = requests.filter((request) => request.operation === "bind").length;
+  await f.owners.nativeInput(nativeBind("ses_child", "msg_new_child", 11), new AbortController().signal);
+  await f.wires.get("ses_child").call("message.deliver", inbound("stale_child_unsent"));
+  await hooks["experimental.chat.messages.transform"]({}, { messages: [child] });
+  assert.equal(patched.length, 1); assert.equal(requests.filter((request) => request.operation === "bind").length, binds, "an accepted stale token is never automatically rebound");
+  const parent = current("ses_parent", "msg_parent");
+  await hooks["chat.message"]({ sessionID: "ses_parent" }, { message: parent.info });
+  await hooks["experimental.chat.messages.transform"]({}, { messages: [parent] });
+  assert.equal(patched.length, 2); assert.match(parent.parts[1].text, /parent_still_owned/); assert.doesNotMatch(parent.parts[1].text, /child_busy_adopted/);
+});
+
+test("known halt before step invocation keeps never-attempted input owned", { timeout: 5000 }, async (t) => {
+  let patches = 0, hold = false; const release = deferred();
+  const f = await fixture(t, { status: async () => { if (hold) await release.promise; return result({ ses_target: { type: "busy" } }); }, part: async (params) => { patches++; return result(params.part); } });
+  await f.action("ses_target"); const signal = new AbortController().signal;
+  const { token } = await f.owners.nativeInput(nativeBind(), signal);
+  await f.wires.get("ses_target").call("message.deliver", inbound("halted_before_step"));
+  hold = true;
+  f.events.emit("session.status", { properties: { sessionID: "ses_target", status: { type: "idle" } } });
+  assert.deepEqual(await f.owners.nativeInput({ ...nativeBind(), operation: "step", token, after: "prt_authored" }, signal), { parts: [] });
+  assert.equal(patches, 0);
+  // The same FIFO still owns the input; a later legitimate active boundary
+  // can claim it, with no restore or new admission.
+  f.events.emit("session.status", { properties: { sessionID: "ses_target", status: { type: "busy" } } });
+  hold = false; release.resolve();
+  const next = await f.owners.nativeInput({ ...nativeBind(), operation: "step", token, after: "prt_authored" }, signal);
+  assert.equal(next.parts.length, 1); assert.equal(patches, 1);
+});
+
+test("foreign, retired and stale-generation hook bindings cannot touch the owned FIFO", { timeout: 5000 }, async (t) => {
+  let patches = 0;
+  const f = await fixture(t, { status: async () => result({ ses_target: { type: "busy" } }),
+    part: async (params) => { patches++; return result(params.part); },
+  });
+  const signal = new AbortController().signal;
+  assert.deepEqual(await f.owners.nativeInput(nativeBind("ses_foreign"), signal), { token: null });
+  assert.equal(f.wires.size, 0);
+  await f.action("ses_target");
+  const old = await f.owners.nativeInput(nativeBind(), signal);
+  await f.wires.get("ses_target").call("message.deliver", inbound("generation"));
+  const newer = await f.owners.nativeInput(nativeBind("ses_target", "msg_new", 11), signal);
+  const step = { ...nativeBind(), operation: "step", after: "prt_authored", token: old.token };
+  assert.deepEqual(await f.owners.nativeInput(step, signal), { parts: [] });
+  assert.deepEqual(await f.owners.nativeInput({ ...step, token: newer.token }, signal), { parts: [] });
+  await assert.rejects(f.owners.nativeInput({ ...nativeBind(), operation: "unknown" }, signal), /invalid/);
+  assert.equal(patches, 0);
+  await f.owners.nativeInput({ ...nativeBind("ses_target", "msg_new", 11), operation: "step", after: "prt_authored", token: newer.token }, signal);
+  assert.equal(patches, 1);
+  f.events.emit("session.deleted", { properties: { info: { id: "ses_target" } } });
+  assert.deepEqual(await f.owners.nativeInput({ ...step, token: newer.token }, signal), { parts: [] });
+});
+
+test("End disposal cancels and joins an in-flight native step without restoring its batch", { timeout: 5000 }, async (t) => {
+  const entered = deferred(), release = deferred(); let cancel, patches = 0;
+  const f = await fixture(t, { status: async () => result({ ses_target: { type: "busy" } }), part: async (_params, config) => {
+    cancel = config.signal; patches++; entered.resolve(); await release.promise; throw cancel.reason;
+  } });
+  await f.action("ses_target"); const signal = new AbortController().signal;
+  const { token } = await f.owners.nativeInput(nativeBind(), signal);
+  await f.wires.get("ses_target").call("message.deliver", inbound("close_step"));
+  const failed = assert.rejects(f.owners.nativeInput({ ...nativeBind(), operation: "step", after: "prt_authored", token }, signal), /disposed/);
+  await entered.promise;
+  let joined = false; const disposing = f.owners.dispose().then(() => { joined = true; });
+  assert.equal(cancel.aborted, true); assert.equal(joined, false);
+  release.resolve(); await failed; await disposing; assert.equal(patches, 1);
 });

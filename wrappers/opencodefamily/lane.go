@@ -57,6 +57,7 @@ type Wrapper struct {
 	opened, closing    bool
 	run                *kit.Run
 	active             *laneRun
+	blockerEpoch       uint64
 	closeOnce          sync.Once
 	closeErr           error
 }

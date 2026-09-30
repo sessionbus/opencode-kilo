@@ -25,6 +25,7 @@
     "peer.mjs",
     "profile.mjs",
     "delivery.mjs",
+    "native-input.mjs",
     "sessionbus-tool.json",
     "skills"
   ],

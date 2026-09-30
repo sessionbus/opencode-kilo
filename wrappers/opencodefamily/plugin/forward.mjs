@@ -107,6 +107,15 @@ export class SessionbusForwarder {
     }
   }
 
+  async nativeInput(parameters, signal) {
+    if (this.#operations >= bridgeLimits.work) throw new Error("Sessionbus forwarder work limit reached");
+    this.#operations++;
+    try {
+      await this.ready(signal);
+      return await this.#request("sessionbus/native-input", parameters, signal);
+    } finally { this.#operations--; }
+  }
+
   async dispose() {
     this.#fail(new Error("Sessionbus forwarder disposed"));
     await this.#closed;

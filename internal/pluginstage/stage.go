@@ -12,10 +12,10 @@ import (
 
 var runtimeFiles = []string{
 	"activation.mjs", "delivery.mjs", "endpoint.mjs", "forward.mjs", "gate.mjs",
-	"owners.mjs", "peer.mjs", "profile.mjs", "readiness.mjs", "server.mjs", "tui.mjs",
+	"owners.mjs", "peer.mjs", "profile.mjs", "readiness.mjs", "server.mjs", "tui.mjs", "native-input.mjs",
 }
 var testFiles = []string{
-	"delivery.test.mjs", "endpoint.test.mjs", "forward.test.mjs", "owners.test.mjs",
+	"delivery.test.mjs", "endpoint.test.mjs", "forward.test.mjs", "owners.test.mjs", "native-input.test.mjs",
 	"peer.test.mjs", "readiness.test.mjs", "readiness-fixture.mjs", "server.test.mjs", "tui.test.mjs",
 	"review-delivery-idle.test.mjs", "review-delivery-receipt.test.mjs", "forward-fixture.mjs",
 }

@@ -36,7 +36,7 @@ func TestRepositoryBoundary(t *testing.T) {
 
 func TestModuleAndImportBoundary(t *testing.T) {
 	mod := string(read(t, "go.mod"))
-	for _, s := range []string{"module github.com/sessionbus/opencode-kilo", "github.com/sessionbus/peer-common v0.0.0-20260929104500-c5551a29654c", "github.com/antst/sessionbus/bus/sdk/go v0.5.9"} {
+	for _, s := range []string{"module github.com/sessionbus/opencode-kilo", "github.com/sessionbus/peer-common v0.0.0-20260930101957-a38c747ecb8e", "github.com/antst/sessionbus/bus/sdk/go v0.5.9"} {
 		if !strings.Contains(mod, s) {
 			t.Errorf("missing module binding %q", s)
 		}
@@ -97,7 +97,7 @@ func testNativePackageBoundary(t *testing.T, product string) {
 	if manifest.Name != "@sessionbus/"+product || len(manifest.Bin) != 0 {
 		t.Fatalf("Native package unexpectedly requires a Node installer: %#v", manifest)
 	}
-	wantFiles := []string{"README.md", "activation.mjs", "delivery.mjs", "endpoint.mjs", "forward.mjs", "gate.mjs", "owners.mjs", "peer.mjs", "profile.mjs", "readiness.mjs", "server.mjs", "sessionbus-tool.json", "skills", "tui.mjs"}
+	wantFiles := []string{"README.md", "activation.mjs", "delivery.mjs", "endpoint.mjs", "forward.mjs", "gate.mjs", "native-input.mjs", "owners.mjs", "peer.mjs", "profile.mjs", "readiness.mjs", "server.mjs", "sessionbus-tool.json", "skills", "tui.mjs"}
 	sort.Strings(manifest.Files)
 	if !equalStrings(manifest.Files, wantFiles) {
 		t.Errorf("Native package files = %v, want %v", manifest.Files, wantFiles)

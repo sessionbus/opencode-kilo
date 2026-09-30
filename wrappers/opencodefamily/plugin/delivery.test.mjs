@@ -93,3 +93,112 @@ test("queued receipt survives later sender cancellation until native idle", asyn
   sender.abort(); status = "idle"; await f.delivery.idle();
   assert.equal(f.submissions.length, 1);
 });
+
+const parent = { sessionID: "ses_native", messageID: "msg_current", created: 100, after: "prt_authored" };
+test("busy FIFO hands one additive part to the next model step without idle", async (t) => {
+  const patches = [];
+  const f = setup(t, { status: async () => "busy", patch: async (part, _signal, attempted) => {
+    attempted(); patches.push(structuredClone(part)); return part;
+  } });
+  await f.delivery.enqueue(f.life.signal, message(1, "first"));
+  await f.delivery.enqueue(f.life.signal, message(2, "second"));
+  const parts = await f.delivery.step(f.life.signal, parent, () => true);
+  assert.equal(f.submissions.length, 0); assert.equal(patches.length, 1);
+  assert.equal(parts[0].messageID, parent.messageID); assert.equal(f.bytes(), 0);
+  assert.equal(parts[0].text, `${renderDelivery(message(1, "first"))}\n\n${renderDelivery(message(2, "second"))}`);
+  assert.deepEqual(await f.delivery.step(f.life.signal, parent, () => true), []);
+  await f.delivery.idle(); assert.equal(patches.length, 1);
+});
+
+test("pre-attempt hook refusal and cancellation preserve owned input", async (t) => {
+  let valid = true, refuse = true, attempts = 0;
+  const f = setup(t, { status: async () => "busy", patch: async (part, _signal, attempted) => {
+    if (refuse) { valid = false; assert.equal(attempted(), false); return false; }
+    attempted(); attempts++; return part;
+  } });
+  await f.delivery.enqueue(f.life.signal, message(1));
+  assert.deepEqual(await f.delivery.step(f.life.signal, parent, () => valid), []);
+  assert.ok(f.bytes() > 0); assert.equal(attempts, 0);
+  const cancel = new AbortController(); cancel.abort(new Error("before attempt"));
+  await assert.rejects(f.delivery.step(cancel.signal, parent, () => true), /before attempt/);
+  assert.ok(f.bytes() > 0);
+  valid = true; refuse = false;
+  await f.delivery.step(f.life.signal, parent, () => valid); assert.equal(attempts, 1); assert.equal(f.bytes(), 0);
+});
+
+test("lost or cancelled part response never replays through another hook or idle", async (t) => {
+  let attempts = 0, status = "busy";
+  const f = setup(t, { status: async () => status, patch: async (_part, signal, attempted) => {
+    attempted(); attempts++; throw signal.reason || new Error("part response lost");
+  } });
+  await f.delivery.enqueue(f.life.signal, message(1));
+  await assert.rejects(f.delivery.step(f.life.signal, parent, () => true), /response lost/);
+  assert.equal(f.bytes(), 0); assert.deepEqual(await f.delivery.step(f.life.signal, parent, () => true), []);
+  status = "idle"; await f.delivery.idle(); assert.equal(attempts, 1); assert.equal(f.submissions.length, 0);
+});
+
+test("hook and idle serialize claims; disposal joins an attempted part update", async (t) => {
+  const entered = deferred(), release = deferred(); let attempts = 0, signal;
+  const f = setup(t, { status: async () => "busy", patch: async (part, cancel, attempted) => {
+    signal = cancel; attempted(); attempts++; entered.resolve(); await release.promise; throw cancel.reason;
+  } });
+  await f.delivery.enqueue(f.life.signal, message(1));
+  const rejected = assert.rejects(f.delivery.step(f.life.signal, parent, () => true), /closed/);
+  await entered.promise;
+  const idle = assert.rejects(f.delivery.idle(), /closed/);
+  f.life.abort(new Error("owner closed"));
+  let joined = false;
+  const disposing = f.delivery.dispose().then(() => { joined = true; });
+  assert.equal(signal.aborted, true); assert.equal(joined, false);
+  release.resolve(); await rejected; await idle; await disposing;
+  assert.equal(attempts, 1); assert.equal(f.bytes(), 0); assert.equal(f.submissions.length, 0);
+});
+
+test("idle event while a hook owns an empty FIFO wakes later input before that hook joins", { timeout: 5000 }, async (t) => {
+  const entered = deferred(), release = deferred(), submitted = deferred(); let status = "busy";
+  const f = setup(t, { status: async () => status, patch: async (part, _signal, attempted) => {
+    attempted(); entered.resolve(); await release.promise; return part;
+  }, submit: async (parameters, _signal, attempted) => { attempted(); f.submissions.push(parameters); submitted.resolve(); } });
+  await f.delivery.enqueue(f.life.signal, message(1));
+  const step = f.delivery.step(f.life.signal, parent, () => true); await entered.promise;
+  assert.equal(f.bytes(), 0);
+  status = "idle"; const idle = f.delivery.idle();
+  assert.equal((await f.delivery.enqueue(f.life.signal, message(2))).disposition, "queued_for_next_turn");
+  release.resolve(); await step; await idle; await submitted.promise;
+  assert.equal(f.submissions.length, 1); assert.match(f.submissions[0].parts[0].text, /message_2/); assert.doesNotMatch(f.submissions[0].parts[0].text, /message_1/);
+});
+
+test("stale part snapshots keep successful and uncertain batches ordered after authored bytes", async (t) => {
+  const persisted = [], authored = { id: parent.after, text: "unaltered authored bytes" };
+  let uncertain = false;
+  const f = setup(t, { status: async () => "busy", patch: async (part, _signal, attempted) => {
+    attempted(); persisted.push(structuredClone(part)); if (uncertain) throw new Error("persisted reply lost"); return part;
+  } });
+  for (let n = 0; n < 3; n++) {
+    await f.delivery.enqueue(f.life.signal, message(n));
+    uncertain = n === 1;
+    if (uncertain) await assert.rejects(f.delivery.step(f.life.signal, parent, () => true), /reply lost/);
+    else await f.delivery.step(f.life.signal, parent, () => true);
+  }
+  const reloaded = [authored, ...persisted].sort((a, b) => Buffer.compare(Buffer.from(a.id), Buffer.from(b.id)));
+  assert.equal(reloaded[0], authored);
+  assert.deepEqual(reloaded.slice(1).map((p) => p.text), [0, 1, 2].map((n) => renderDelivery(message(n))));
+  assert.deepEqual(await f.delivery.step(f.life.signal, parent, () => true), []);
+  await f.delivery.idle(); assert.equal(f.submissions.length, 0);
+  // A new parent does not inherit the old parent's exhausted upper floor.
+  await f.delivery.enqueue(f.life.signal, message(3));
+  const other = { ...parent, messageID: "msg_next", after: "prt_" };
+  const [next] = await f.delivery.step(f.life.signal, other, () => true);
+  assert.match(next.id, /^prt_000000000000[0-9A-Za-z]{14}$/u);
+});
+
+test("invalid or exhausted part bounds leave the unsent FIFO untouched", async (t) => {
+  let patches = 0;
+  const f = setup(t, { status: async () => "busy", patch: async (part, _signal, attempted) => { attempted(); patches++; return part; } });
+  await f.delivery.enqueue(f.life.signal, message(1)); const bytes = f.bytes();
+  for (const after of ["prt_é", `prt_${"~".repeat(252)}`]) {
+    await assert.rejects(f.delivery.step(f.life.signal, { ...parent, after }, () => true), /unsupported|adapter ordering bound/);
+    assert.equal(patches, 0); assert.equal(f.bytes(), bytes);
+  }
+  await f.delivery.step(f.life.signal, parent, () => true); assert.equal(patches, 1);
+});
