@@ -208,3 +208,37 @@ test("reconnect gates new actions until the replacement hello is acknowledged", 
   await action;
   assert.equal(lists, 1);
 });
+
+// As observed live (A6 diagnostic): after session.superseded the kit reports
+// terminal while its reply write has not completed, so its closed is still
+// pending. This socket holds the kit's replies once `held.on`, and releases
+// them at the end so the kit finishes normally.
+function holdingReplies(held) {
+  return (socketPath) => {
+    const socket = net.createConnection(socketPath);
+    const write = socket.write.bind(socket);
+    socket.write = (data, ...rest) => {
+      if (!held.on || !String(data).includes('"result"')) return write(data, ...rest);
+      held.parked.push(() => write(data, ...rest));
+      return true;
+    };
+    return socket;
+  };
+}
+
+test("a superseded peer rejects ready and actions at once while the kit's closed is still pending", { timeout: 5000 }, async (t) => {
+  let wire;
+  const env = await fixture(t, async (connection, request) => { wire = connection; await connection.result(request, request.method === "session.hello" ? {} : { sessions: [] }); });
+  const held = { on: false, parked: [] };
+  const peer = own(t, env, { connect: holdingReplies(held) });
+  await peer.ready();
+  held.on = true;
+  const superseded = wire.call("session.superseded", {}).catch(() => {});
+  while (!peer.terminal) await new Promise((resolve) => setTimeout(resolve, 5));
+  await assert.rejects(peer.ready(), /superseded/);
+  await assert.rejects(peer.action("list", {}), /superseded/);
+  assert.equal(peer.signal.aborted, false, "the kit's closed is still pending");
+  held.on = false;
+  for (const release of held.parked.splice(0)) release();
+  await superseded;
+});

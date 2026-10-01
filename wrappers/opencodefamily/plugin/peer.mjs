@@ -59,6 +59,11 @@ export class OwnedPeer {
   }
 
   get signal() { return this.#controller.signal; }
+  get terminal() { return this.#peer.terminal; }
+
+  // A terminal kit peer (superseded, or its hello refused) never becomes ready
+  // again, even while its closed is still pending; its reason ends the waits.
+  #ended() { return this.#peer.terminal ? this.#peer.error || new Error("Sessionbus peer closed") : undefined; }
 
   #live() {
     const peer = this.#peer;
@@ -92,6 +97,8 @@ export class OwnedPeer {
     const cancel = signal ? AbortSignal.any([signal, this.signal]) : this.signal;
     while (!this.#live()) {
       if (cancel.aborted) throw cancel.reason;
+      const ended = this.#ended();
+      if (ended) throw ended;
       this.#reset();
       await this.#gate.wait(cancel);
     }

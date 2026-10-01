@@ -50,14 +50,23 @@ repository.
   - Native names no initiator, so an abort from another cause holds the same way, and native resuming an already admitted prompt releases the hold.
   - **Not changed:** after Reject at a permission prompt, a different native path with no abort signal, the idle wake is expected to submit as before (not rerun).
 
-## 3. Displaced interactive Kilo session: its tool call hangs
+## 3. Displaced interactive Kilo session
 
 A second `kilo-peer` launch takes over the same Sessionbus identity.
-- The first session's `sessionbus` tool call then stays `running` with no output or error; it was still running at the export, about 30 s later. It does not fail.
-- Whether the displaced session receives `session.superseded` is UNKNOWN.
-- Separately, an L2 test showed the owner layer re-establishing a superseded identity after a native session update.
+- **Up to f33a6d0:** the first session's `sessionbus` tool call stayed `running` with no output or error; it was still running at the export, about 30 s later. Separately, an L2 test showed the owner layer re-establishing a superseded identity after a native session update. Evidence: RESULTS-S5-KILO.md (C7 and A6 sections).
+- **Since da534e5:**
+  - the displaced session's tool calls fail at once with `superseded` (live: 2 to 3 ms);
+  - the new holder kept receiving every message;
+  - no retake was observed in the 70 s window, which rests on routing and the session row only;
+  - in the L2 test, the displaced owner sends no second hello after a native session update.
 
-Evidence: RESULTS-S5-KILO.md (C7 and A6 sections).
+  Evidence: RESULTS-KILO-A6-DISPLACED.md.
+- **Still observed:** the only text the user and model see is the bare word `superseded`.
+  - The TUI shows the tool line without an error mark.
+  - The model reported it as "the literal string superseded" with "no error text".
+  - Nothing says that another launch took the session over or that a relaunch is needed.
+
+  Evidence: RESULTS-KILO-A6-DISPLACED.md.
 
 ## 4. Socket file left after a lane worker is killed (OpenCode and Kilo lanes)
 
@@ -114,6 +123,13 @@ Evidence: RESULTS-S4-KILO.md (A8b); RESULTS-I1-C.md (OpenCode).
 ## 10. Other recorded observations
 
 - **Kilo lane with an invalid model:** the Run ends `unavailable` with reason "Kilo POST /session/…/message returned HTTP 500" instead of native's model error. It reports no fabricated success. Evidence: RESULTS-S4-LANES.md (A4).
+- **Kilo plugin off and on in the native plugin manager:**
+  - toggling `@sessionbus/kilo` off removes the session's row;
+  - toggling it back on leaves the plugin `inactive`, because the launch's claim refuses a second start in the same launch;
+  - Sessionbus then stays unavailable in that TUI until relaunch;
+  - no second session is created.
+
+  Evidence: RESULTS-KILO-FRESH-TUI.md (check 3).
 
 ## 11. Not run or not established
 
@@ -126,7 +142,6 @@ Evidence: RESULTS-S4-KILO.md (A8b); RESULTS-I1-C.md (OpenCode).
   - OpenCode lane delivery inside the completion window: the window side was not reached.
   - OpenCode lane close join with a sampled worker: partial.
   - Lane idle wake after a daemon restart: test defect, not run.
-  - Kilo superseded signal: UNKNOWN.
   - A Kilo blocker appearing between the final check and native submission (A7c): needs a forced race.
   - Exact parent, compaction and Task-root handling, late adoption, and a held step across idle then busy (R2, R2b, R4b): L2 only.
   - Consumer authorization (R10).

@@ -283,7 +283,9 @@ export class NativeOwners {
     this.#background(task.then(clear, (error) => {
       clear();
       this.#report(error);
-      if (error.code === `${nativeProduct.product.toUpperCase()}_IDENTITY` || record.peer.signal.aborted) return this.#retire(record, error);
+      // A superseded or refused peer keeps its record: a new owner would say
+      // hello again and take the session back from its current holder.
+      if (error.code === `${nativeProduct.product.toUpperCase()}_IDENTITY` || record.peer.signal.aborted && !record.peer.terminal) return this.#retire(record, error);
       // A transport loss retains the kit's reconnect behavior and desired
       // identity; it never publishes a guessed replacement title.
     }));
