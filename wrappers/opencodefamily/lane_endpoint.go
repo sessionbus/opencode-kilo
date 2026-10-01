@@ -12,9 +12,19 @@ import (
 	"github.com/sessionbus/peer-common/mcp"
 )
 
+// LaneToolHost answers one lane's resident native Sessionbus tool.
+type LaneToolHost interface {
+	// ToolAction runs one action for the tool call of this native session and message.
+	ToolAction(ctx context.Context, sessionID, messageID, action string, args json.RawMessage) (json.RawMessage, error)
+	// ToolEnded reports that an initialized resident tool connection ended.
+	ToolEnded()
+}
+
 type laneEndpoint struct {
 	*host.PrivateEndpoint
-	owner     *Wrapper
+	host      LaneToolHost
+	product   string // tool identity metadata is "sessionbus.<product>"
+	title     string
 	mu        sync.Mutex
 	clients   map[net.Conn]*laneToolOwner
 	ready     chan struct{}
@@ -28,14 +38,25 @@ type laneToolOwner struct {
 	initialized bool
 }
 
-func newLaneEndpoint(p *Wrapper, key string) (*laneEndpoint, error) {
-	l, e := host.ListenPrivate(p.socket, key)
+func newLaneEndpoint(owner LaneToolHost, socket, key, product, title string) (*laneEndpoint, error) {
+	l, e := host.ListenPrivate(socket, key)
 	if e != nil {
 		return nil, e
 	}
-	endpoint := &laneEndpoint{PrivateEndpoint: l, owner: p, clients: map[net.Conn]*laneToolOwner{}, ready: make(chan struct{}), accepted: make(chan struct{})}
+	endpoint := &laneEndpoint{PrivateEndpoint: l, host: owner, product: product, title: title, clients: map[net.Conn]*laneToolOwner{}, ready: make(chan struct{}), accepted: make(chan struct{})}
 	go endpoint.serve()
 	return endpoint, nil
+}
+
+// ListenLaneTools serves a lane's resident native Sessionbus tool on a private
+// endpoint under socket. It returns the endpoint path for the native child and
+// the endpoint's Close.
+func ListenLaneTools(owner LaneToolHost, socket, key, product, title string) (string, func() error, error) {
+	e, err := newLaneEndpoint(owner, socket, key, product, title)
+	if err != nil {
+		return "", nil, err
+	}
+	return e.Path, e.Close, nil
 }
 func (e *laneEndpoint) serve() {
 	defer close(e.accepted)
@@ -90,29 +111,39 @@ func (o *laneToolOwner) End() {
 	o.initialized = false
 	e.mu.Unlock()
 	if lost {
-		e.owner.fail(e.owner.kind.err("resident tool connection ended"))
+		e.host.ToolEnded()
 	}
 }
 func (o *laneToolOwner) Action(ctx context.Context, action string, args json.RawMessage) (json.RawMessage, error) {
 	return o.ActionWithMeta(ctx, action, args, nil)
 }
 func (o *laneToolOwner) ActionWithMeta(ctx context.Context, action string, args, meta json.RawMessage) (json.RawMessage, error) {
-	p := o.endpoint.owner
+	e := o.endpoint
 	var envelope map[string]json.RawMessage
 	var identity struct {
 		SessionID string `json:"session_id"`
 		MessageID string `json:"message_id"`
 	}
-	if json.Unmarshal(meta, &envelope) != nil || json.Unmarshal(envelope["sessionbus."+p.kind.name()], &identity) != nil || !validNativeID(identity.SessionID) || !validMessageID(identity.MessageID) {
-		return nil, fmt.Errorf("missing or malformed native %s tool identity", p.kind.title())
+	if json.Unmarshal(meta, &envelope) != nil || json.Unmarshal(envelope["sessionbus."+e.product], &identity) != nil || !validNativeID(identity.SessionID) || !validMessageID(identity.MessageID) {
+		return nil, fmt.Errorf("missing or malformed native %s tool identity", e.title)
 	}
+	return e.host.ToolAction(ctx, identity.SessionID, identity.MessageID, action, args)
+}
+
+// ToolEnded keeps the released lane policy: losing the initialized resident
+// tool connection ends the lane.
+func (p *Wrapper) ToolEnded() { p.fail(p.kind.err("resident tool connection ended")) }
+
+// ToolAction serves a tool call from the lane's own session or its descendants
+// through the lane's bus identity.
+func (p *Wrapper) ToolAction(ctx context.Context, sessionID, _, action string, args json.RawMessage) (json.RawMessage, error) {
 	p.mu.Lock()
 	ready, caller := p.opened && !p.closing, p.caller
 	p.mu.Unlock()
 	if !ready || caller == nil {
 		return nil, p.kind.err("lane not adopted")
 	}
-	if err := p.ownsSession(ctx, identity.SessionID); err != nil {
+	if err := p.ownsSession(ctx, sessionID); err != nil {
 		return nil, err
 	}
 	return caller.Action(ctx, action, args)

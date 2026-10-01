@@ -42,7 +42,7 @@ func TestLaneEndpointInitializedConnectionLossPolicy(t *testing.T) {
 			life, cancel := context.WithCancelCause(context.Background())
 			defer cancel(nil)
 			p := &Wrapper{ctx: life, cancel: cancel}
-			e := &laneEndpoint{owner: p, clients: map[net.Conn]*laneToolOwner{}, ready: make(chan struct{})}
+			e := &laneEndpoint{host: p, product: p.kind.name(), title: p.kind.title(), clients: map[net.Conn]*laneToolOwner{}, ready: make(chan struct{})}
 			connect := func(initialize bool) (net.Conn, <-chan struct{}) {
 				client, server := net.Pipe()
 				_ = client.SetDeadline(time.Now().Add(5 * time.Second))

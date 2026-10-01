@@ -123,7 +123,7 @@ func (p *Wrapper) Open(ctx context.Context, request kit.OpenRequest) (result kit
 	if err != nil {
 		return result, err
 	}
-	endpoint, err := newLaneEndpoint(p, password[:24])
+	endpoint, err := newLaneEndpoint(p, p.socket, password[:24], p.kind.name(), p.kind.title())
 	if err != nil {
 		return result, err
 	}
