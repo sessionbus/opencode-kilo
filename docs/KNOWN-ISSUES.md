@@ -29,7 +29,15 @@ Delivery and wake worked in each case below; the receiving model did not act on 
 ## 2. Cancel while a message is pending
 
 - **OpenCode interactive:** native TUI cancel (Esc Esc) resumes pending steering input, so the pending message runs right after the cancel. Evidence: MATRIX-R4.1-APPLICABILITY-ADDENDUM-3.md; RESULTS-M1W-OC.md (LC).
-- **OpenCode lane:** the lane interrupt (native interrupt with `resume=false`) ends the execution. A message already admitted to the Run (receipt `injected`) but not yet delivered stays parked in the native inbox. The lane's next Run delivers it and acts on it. Evidence: RESULTS-M1W-OC.md (LC).
+- **OpenCode lane:**
+  - Up to 688e85b, the lane interrupt (native interrupt with `resume=false`) ended the execution. A message already admitted to the Run (receipt `injected`) but not yet delivered stayed parked in the native inbox, and the lane's next Run delivered it and acted on it. Evidence: RESULTS-M1W-OC.md (LC).
+  - Since 59525c9, the interrupted Run withdraws its undelivered steers before it ends. Live, the pending message was cancelled natively 7 ms after the interrupted terminal and never delivered, and a later message started a Run that delivered only that message. Evidence: RESULTS-M3-LC-59525c9.md.
+  - **Still observed:** the interrupted task's own message stays in native history. In that rerun, the next Run's model re-ran the interrupted task's command from history.
+  - **Stated residuals** (A1-NOTE-M3-r2-59525c9.md):
+    - a steer native delivered before the interrupt took effect;
+    - a steer request answering after the Run returned;
+    - an interrupt with no native terminal;
+    - a lane closed before the terminal.
 - **Kilo interactive:** the user cancels while a message is pending. The wrapper's idle wake then submits that message as a new turn, which the model runs. This happened 77 ms after Esc Esc and 115 ms after Reject at a permission prompt. Evidence: RESULTS-I1-KILO.md (I1.4w LC), RESULTS-S4-KILO.md (A7b).
 
 ## 3. Displaced interactive Kilo session: its tool call hangs

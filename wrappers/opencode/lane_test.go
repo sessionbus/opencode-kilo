@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -40,6 +41,8 @@ type fakeNative struct {
 	drop     chan struct{}
 	slowGet  time.Duration
 	settled  map[string]bool // ask or form IDs another client already answered
+	withdraw int             // status for inbox withdrawals; zero answers 204
+	halt     func() int      // runs before the interrupt answer; nonzero is its status
 }
 
 func newFakeNative(t *testing.T) *fakeNative {
@@ -126,8 +129,24 @@ func (f *fakeNative) serve(w http.ResponseWriter, r *http.Request) {
 	case len(parts) == 2 && parts[1] == "interrupt":
 		f.mu.Lock()
 		f.replies = append(f.replies, "interrupt "+r.URL.RawQuery)
+		halt := f.halt
 		f.mu.Unlock()
+		if halt != nil {
+			if status := halt(); status != 0 {
+				w.WriteHeader(status)
+				return
+			}
+		}
 		json.NewEncoder(w).Encode(map[string]any{"interrupted": true})
+	case len(parts) == 3 && parts[1] == "inbox" && r.Method == "DELETE":
+		f.mu.Lock()
+		f.replies = append(f.replies, "withdraw "+parts[2])
+		status := f.withdraw
+		f.mu.Unlock()
+		if status == 0 {
+			status = http.StatusNoContent
+		}
+		w.WriteHeader(status)
 	case len(parts) == 2 && parts[1] == "message":
 		f.mu.Lock()
 		history := f.history
@@ -759,5 +778,181 @@ func TestLaneFailureBeforeOurDeliveryEndsTheRunAsUnknown(t *testing.T) {
 	}
 	if frame := f.answer(t, f.begin(t, "session.close", kit.SessionCloseRequest{SessionID: "ses_lane@local"})); frame.Error != nil {
 		t.Fatalf("close = %+v", frame.Error)
+	}
+}
+
+func (f *laneFixture) interrupt(t *testing.T) {
+	t.Helper()
+	if frame := f.answer(t, f.begin(t, "turn.interrupt", protocol.SessionTarget{SessionID: "ses_lane@local"})); frame.Error != nil {
+		t.Fatalf("interrupt: %+v", frame.Error)
+	}
+}
+
+func (f *fakeNative) withdrawn() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var ids []string
+	for _, reply := range f.replies {
+		if id, ok := strings.CutPrefix(reply, "withdraw "); ok {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+// A cancelled Run withdraws the steers native has not delivered before it
+// ends, after the native interrupt; the Run's own prompt and delivered steers
+// are left alone, and the cancelling Run takes no further input.
+func TestLaneInterruptWithdrawsItsUndeliveredSteers(t *testing.T) {
+	f := newLaneFixture(t, kit.OpenOptions{}, "", nil)
+	own := f.start(t, 1, "task")
+	delivered(f.native, own)
+	receipt := f.deliver(t, "seen")
+	seen := f.prompt(t, "seen")
+	f.answer(t, receipt)
+	f.native.emit("session.inbox.delivered", map[string]any{"sessionID": "ses_lane", "inboxID": seen})
+	receipt = f.deliver(t, "pending")
+	pending := f.prompt(t, "pending")
+	if frame := f.answer(t, receipt); frame.Error != nil || !strings.Contains(string(frame.Result), `"injected"`) {
+		t.Fatalf("receipt = %+v %s", frame.Error, frame.Result)
+	}
+	f.running(t, 1)
+	f.interrupt(t)
+	if frame := f.answer(t, f.deliver(t, "after")); frame.Error == nil || frame.Error.Code != protocol.NotRunning {
+		t.Fatalf("deliver while cancelling = %+v %s", frame.Error, frame.Result)
+	}
+	f.native.emit("session.execution.interrupted", map[string]any{"sessionID": "ses_lane", "reason": "user"})
+	if status := f.status(t, "turn.wait", 1); status.Result.Outcome != "interrupted" || status.Result.Result != "" {
+		t.Fatalf("status = %+v %+v", status, status.Result)
+	}
+	f.native.mu.Lock()
+	replies := slices.Clone(f.native.replies)
+	f.native.mu.Unlock()
+	if want := []string{"interrupt resume=false", "withdraw " + pending}; !slices.Equal(replies, want) {
+		t.Fatalf("native calls = %q, want %q", replies, want)
+	}
+}
+
+// A steer still in flight when its Run is cancelled is withdrawn again once
+// its request answers, since native may have admitted it after the Run ended.
+func TestLaneSteerInFlightAtInterruptIsWithdrawnAfterItsAnswer(t *testing.T) {
+	release := make(chan struct{})
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	f := newLaneFixture(t, kit.OpenOptions{}, "", func(n *fakeNative) {
+		n.holds["late"] = func(w http.ResponseWriter) {
+			<-release
+			json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{}})
+		}
+	})
+	t.Cleanup(unblock)
+	own := f.start(t, 1, "task")
+	delivered(f.native, own)
+	receipt := f.deliver(t, "late")
+	late := f.prompt(t, "late")
+	f.interrupt(t)
+	f.native.emit("session.execution.interrupted", map[string]any{"sessionID": "ses_lane", "reason": "user"})
+	f.status(t, "turn.wait", 1)
+	if got := f.native.withdrawn(); !slices.Equal(got, []string{late}) {
+		t.Fatalf("withdrawn at the Run's end = %q", got)
+	}
+	unblock()
+	if frame := f.answer(t, receipt); frame.Error != nil {
+		t.Fatalf("receipt = %+v", frame.Error)
+	}
+	if got := f.native.withdrawn(); !slices.Equal(got, []string{late, late}) {
+		t.Fatalf("withdrawn after the answer = %q", got)
+	}
+}
+
+// A steer whose request answers before its cancelled Run's terminal is left
+// to the Run's withdrawal, so a failed interrupt cannot have dropped it.
+func TestLaneSteerAnsweredBeforeTheTerminalIsWithdrawnOnceByTheRun(t *testing.T) {
+	release := make(chan struct{})
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	f := newLaneFixture(t, kit.OpenOptions{}, "", func(n *fakeNative) {
+		n.holds["early"] = func(w http.ResponseWriter) {
+			<-release
+			json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{}})
+		}
+	})
+	t.Cleanup(unblock)
+	own := f.start(t, 1, "task")
+	delivered(f.native, own)
+	receipt := f.deliver(t, "early")
+	early := f.prompt(t, "early")
+	f.interrupt(t)
+	unblock()
+	if frame := f.answer(t, receipt); frame.Error != nil || !strings.Contains(string(frame.Result), `"injected"`) {
+		t.Fatalf("receipt = %+v %s", frame.Error, frame.Result)
+	}
+	if got := f.native.withdrawn(); len(got) != 0 {
+		t.Fatalf("withdrawn before the terminal = %q", got)
+	}
+	f.native.emit("session.execution.interrupted", map[string]any{"sessionID": "ses_lane", "reason": "user"})
+	f.status(t, "turn.wait", 1)
+	if got := f.native.withdrawn(); !slices.Equal(got, []string{early}) {
+		t.Fatalf("withdrawn by the Run = %q", got)
+	}
+}
+
+// An interrupt call that fails after native already ended the Run keeps it
+// cancelled, so a steer answering later is still withdrawn.
+func TestLaneInterruptErrorAfterTheTerminalKeepsTheRunCancelled(t *testing.T) {
+	release := make(chan struct{})
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	f := newLaneFixture(t, kit.OpenOptions{}, "", func(n *fakeNative) {
+		n.holds["late"] = func(w http.ResponseWriter) {
+			<-release
+			json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{}})
+		}
+		n.halt = func() int {
+			// The Run ends and takes its snapshot before the call fails.
+			n.emit("session.execution.interrupted", map[string]any{"sessionID": "ses_lane", "reason": "user"})
+			time.Sleep(300 * time.Millisecond)
+			return http.StatusBadGateway
+		}
+	})
+	t.Cleanup(unblock)
+	own := f.start(t, 1, "task")
+	delivered(f.native, own)
+	receipt := f.deliver(t, "late")
+	late := f.prompt(t, "late")
+	f.interrupt(t)
+	unblock()
+	f.answer(t, receipt)
+	if got := f.native.withdrawn(); !slices.Equal(got, []string{late, late}) {
+		t.Fatalf("withdrawn = %q", got)
+	}
+}
+
+// A withdrawal native does not confirm is reported with the interrupted
+// terminal and is not retried; the lane stays usable.
+func TestLaneUnconfirmedWithdrawalIsReportedAndKeepsTheLane(t *testing.T) {
+	f := newLaneFixture(t, kit.OpenOptions{}, "", func(n *fakeNative) { n.withdraw = http.StatusInternalServerError })
+	own := f.start(t, 1, "task")
+	delivered(f.native, own)
+	receipt := f.deliver(t, "pending")
+	f.prompt(t, "pending")
+	f.answer(t, receipt)
+	f.interrupt(t)
+	f.native.emit("session.execution.interrupted", map[string]any{"sessionID": "ses_lane", "reason": "user"})
+	status := f.status(t, "turn.wait", 1)
+	if status.State != "done" || status.Result.Outcome != "interrupted" || status.Result.Result != "pending input was not withdrawn and may run with the next task" {
+		t.Fatalf("status = %+v %+v", status, status.Result)
+	}
+	if got := f.native.withdrawn(); len(got) != 1 {
+		t.Fatalf("withdrawals = %q", got)
+	}
+	if frame := f.answer(t, f.begin(t, "turn.ack", protocol.RunRef{SessionID: "ses_lane@local", RunID: "g/1"})); frame.Error != nil {
+		t.Fatalf("ack: %+v", frame.Error)
+	}
+	f.start(t, 2, "next")
+	select {
+	case <-f.closes:
+		t.Fatal("lane retired after an unconfirmed withdrawal")
+	default:
 	}
 }

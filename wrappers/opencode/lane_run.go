@@ -31,6 +31,7 @@ type laneRun struct {
 	terminal  int            // position of the latest succeeded terminal after our delivery
 	admitted  bool           // native announced our own prompt's admission in the stream
 	rejected  bool           // this lane declined a native ask during this Run
+	cancelled bool           // interrupted: no further input; undelivered steers withdrawn at the end
 	final     bool
 	early     bool // the terminal came before native delivered our own prompt
 	outcome   string
@@ -41,6 +42,24 @@ type laneRun struct {
 
 func newLaneRun(run *kit.Run, own string) *laneRun {
 	return &laneRun{run: run, own: own, prompts: map[string]int{own: promptInflight}, released: map[string]bool{}, delivered: map[string]int{}, settled: make(chan struct{})}
+}
+
+// undelivered lists the steers of this Run native has not delivered: every
+// tracked or released input except the Run's own prompt, which is left to
+// native. The caller holds the lane lock.
+func (r *laneRun) undelivered() []string {
+	var ids []string
+	for id := range r.prompts {
+		if _, delivered := r.delivered[id]; !delivered && id != r.own {
+			ids = append(ids, id)
+		}
+	}
+	for id := range r.released {
+		if id != r.own {
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }
 
 // settle records the Run's terminal once.
@@ -297,7 +316,24 @@ func (l *Lane) Run(ctx context.Context, run *kit.Run, input kit.RunInput) (kit.T
 	}
 	l.mu.Lock()
 	outcome, reason, message, unknown, early := r.outcome, r.reason, r.message, len(r.released), r.early
+	var steers []string
+	if r.cancelled {
+		steers = r.undelivered()
+	}
 	l.mu.Unlock()
+	// A cancelled Run withdraws its undelivered steers before it ends: with
+	// resume=false native leaves them parked, and the next Run's prompt would
+	// deliver them. No retry; a failure is reported with the Run's terminal.
+	var failed []error
+	for _, steer := range steers {
+		failed = append(failed, l.withdraw(client, session, steer))
+	}
+	if errors.Join(failed...) != nil {
+		if message != "" {
+			message += "; "
+		}
+		message += "pending input was not withdrawn and may run with the next task"
+	}
 	if early && outcome != "succeeded" {
 		return kit.TurnResult{}, fmt.Errorf("OpenCode execution %s (%s: %s) before delivering this Run's input; the input stays pending in native", outcome, reason, message)
 	}
