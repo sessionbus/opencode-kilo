@@ -141,11 +141,17 @@ func (p *Wrapper) executeRun(ctx context.Context, run *kit.Run, input kit.RunInp
 	}
 	raw, err := op.wait()
 	// Input queued after the loop's last model call took its share: the Run
-	// sends it as one more ordinary message and ends with that reply. The final
-	// empty check shares Deliver's lock, so later input waits for the next Run.
-	for err == nil {
+	// sends it as one more ordinary message and ends with that reply. Each
+	// ending decision and the closure are one critical section under Deliver's
+	// lock, so input Deliver accepts is always sent, and later input waits for
+	// the next Run.
+	var interrupt *nativeInterrupt
+	var rejects []*nativeInterrupt
+	for {
 		p.mu.Lock()
-		if t.interrupt != nil || len(t.inbox) == 0 || p.ctx.Err() != nil {
+		if err != nil || t.interrupt != nil || len(t.inbox) == 0 || p.ctx.Err() != nil {
+			t.closed = true
+			interrupt, rejects = t.interrupt, t.rejects
 			p.mu.Unlock()
 			break
 		}
@@ -161,7 +167,7 @@ func (p *Wrapper) executeRun(ctx context.Context, run *kit.Run, input kit.RunInp
 			}
 		}
 		if err != nil {
-			break
+			continue
 		}
 		p.mu.Lock()
 		op, err = p.client.begin(request, 200)
@@ -173,10 +179,6 @@ func (p *Wrapper) executeRun(ctx context.Context, run *kit.Run, input kit.RunInp
 			raw, err = op.wait()
 		}
 	}
-	p.mu.Lock()
-	t.closed = true
-	interrupt, rejects := t.interrupt, t.rejects
-	p.mu.Unlock()
 	if interrupt != nil {
 		<-interrupt.done
 		if interrupt.err != nil {
