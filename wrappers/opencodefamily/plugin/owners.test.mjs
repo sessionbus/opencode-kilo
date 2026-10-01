@@ -579,3 +579,46 @@ test("busy input not handed off at a step is still delivered by the existing idl
   await submitted.promise; await f.owners.dispose();
   assert.equal(submissions, 1);
 });
+
+const turn = async (f, type) => { f.events.emit("session.status", { properties: { sessionID: "ses_target", status: { type } } }); await nextTurn(); };
+const aborted = (f, sessionID = "ses_target", name = "MessageAbortedError") => f.events.emit("session.error", { properties: { sessionID, error: { name, data: {} } } });
+
+test("Kilo native abort holds idle submission until native starts work again; the busy handoff then carries the input", { skip: !nativeProduct.blockers, timeout: 5000 }, async (t) => {
+  const patches = [];
+  let busy = false, submissions = 0;
+  const f = await fixture(t, { status: async () => result(busy ? { ses_target: { type: "busy" } } : {}),
+    partUpdate: async (params) => { patches.push(params); return result(params.part); },
+    promptAsync: async () => { submissions++; return result(undefined, 204); } });
+  await f.action("ses_target");
+  aborted(f); await turn(f, "idle");
+  // Both the enqueue-triggered and the idle-event drain are held.
+  assert.equal((await f.wires.get("ses_target").call("message.deliver", inbound("held"))).disposition, "queued_for_next_turn");
+  await turn(f, "idle");
+  assert.equal(submissions, 0);
+  busy = true; await turn(f, "busy");
+  const reply = await f.owners.nativeInput({ sessionID: "ses_target", messageID: "msg_prompt", after: "prt_000000000001ABCDEFGHIJKLMN" }, new AbortController().signal);
+  assert.equal(patches.length, 1); assert.match(reply.parts[0].text, /messageId":"held"/u);
+  busy = false; await turn(f, "idle"); await f.owners.dispose();
+  assert.equal(submissions, 0);
+});
+
+test("Kilo input held after an abort is woken on idle once native has started work again", { skip: !nativeProduct.blockers, timeout: 5000 }, async (t) => {
+  let submissions = 0;
+  const submitted = deferred();
+  const f = await fixture(t, { promptAsync: async () => { submissions++; submitted.resolve(); return result(undefined, 204); } });
+  await f.action("ses_target");
+  aborted(f); await turn(f, "idle");
+  assert.equal((await f.wires.get("ses_target").call("message.deliver", inbound("held"))).disposition, "queued_for_next_turn");
+  await turn(f, "busy"); await turn(f, "idle");
+  await submitted.promise; await f.owners.dispose();
+  assert.equal(submissions, 1);
+});
+
+test("Kilo a non-abort error or another session's abort leaves the idle wake as it is", { skip: !nativeProduct.blockers, timeout: 5000 }, async (t) => {
+  let submissions = 0;
+  const f = await fixture(t, { promptAsync: async () => { submissions++; return result(undefined, 204); } });
+  await f.action("ses_target");
+  aborted(f, "ses_target", "ProviderAuthError"); aborted(f, "ses_other");
+  assert.equal((await f.wires.get("ses_target").call("message.deliver", inbound("wake"))).disposition, "written");
+  assert.equal(submissions, 1);
+});
