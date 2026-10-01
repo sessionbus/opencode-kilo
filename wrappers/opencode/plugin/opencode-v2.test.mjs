@@ -230,12 +230,15 @@ function tuiContext() {
     location: { directory: "/work" },
     calls, toasts,
     fail: undefined,
-    missing: new Set(), gets: [],
+    missing: new Set(), gets: [], holdOnce: new Set(), held: [],
     client: {
       session: {
         get: async ({ sessionID }) => {
           ctx.gets.push(sessionID);
-          if (ctx.missing.has(sessionID)) throw { _tag: "SessionNotFoundError", sessionID, message: `Session not found: ${sessionID}` };
+          const notFound = { _tag: "SessionNotFoundError", sessionID, message: `Session not found: ${sessionID}` };
+          // A read whose 404 is still settling when native announces the session.
+          if (ctx.holdOnce.delete(sessionID)) return new Promise((_resolve, reject) => ctx.held.push(() => reject(notFound)));
+          if (ctx.missing.has(sessionID)) throw notFound;
           return { id: sessionID };
         },
         update: async (input) => { calls.push(["update", input]); },
@@ -353,6 +356,27 @@ test("tui: a reconnect before native creates the shown session keeps its pending
     ["update", { sessionID: "ses_prompt", title: "worker" }],
     ["activate", { sessionID: "ses_prompt", socket: "/bus.sock", groups: ["team"], name: "worker" }, { location: { directory: "/work" } }],
   ]);
+});
+
+test("tui: native's session.created while the earlier read settles still activates, once; the late 404 changes nothing", async () => {
+  const { ctx, solid } = tuiContext();
+  ctx.holdOnce.add("ses_prompt");
+  await createTui(launch(), { solid })(ctx);
+  ctx.show("ses_prompt"); await flush();
+  assert.equal(ctx.held.length, 1);
+  // Native's sole announcement arrives before the first read's 404 settles.
+  ctx.emit("session.created", { type: "session.created", data: { sessionID: "ses_prompt" } }); await flush(); await flush();
+  for (const release of ctx.held) release();
+  await flush(); await flush();
+  const activated = [
+    ["update", { sessionID: "ses_prompt", title: "worker" }],
+    ["activate", { sessionID: "ses_prompt", socket: "/bus.sock", groups: ["team"], name: "worker" }, { location: { directory: "/work" } }],
+  ];
+  assert.deepEqual(ctx.calls, activated);
+  assert.deepEqual(ctx.gets, ["ses_prompt", "ses_prompt"]); assert.deepEqual(ctx.toasts, []);
+  // The late 404 left nothing pending: a duplicate announcement starts nothing.
+  ctx.emit("session.created", { type: "session.created", data: { sessionID: "ses_prompt" } }); await flush(); await flush();
+  assert.deepEqual(ctx.calls, activated); assert.equal(ctx.gets.length, 2);
 });
 
 test("tui: native unload of its directory and reconnect each trigger one activation; cleanup stops all", async () => {

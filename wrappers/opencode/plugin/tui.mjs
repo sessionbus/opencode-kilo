@@ -27,20 +27,26 @@ export function createTui(environment = process.env, dependencies = {}) {
     let closed = false;
     const activate = (sessionID, title) => {
       const location = sessions.get(sessionID);
+      // Until native confirms the session exists, it stays pending with the
+      // name still to give, so native's session.created for it, even one that
+      // arrives while this read settles, starts another attempt.
+      title ??= pending.get(sessionID);
+      pending.set(sessionID, title);
       void (async () => {
         await context.client.session.get({ sessionID });
+        pending.delete(sessionID);
         if (title) await context.client.session.update({ sessionID, title });
         if (closed) return;
         await context.client.rpc(contract).activate({ sessionID, socket: launch.socket, groups: launch.groups, ...(title ? { name: title } : {}) }, { location });
       })().catch((error) => {
-        if (closed) return;
-        if (error?._tag === "SessionNotFoundError") {
-          // A later attempt without the name (a reconnect) keeps it.
-          pending.set(sessionID, title ?? pending.get(sessionID));
-          return;
-        }
+        // Not created yet: it is already pending. A late rejection after
+        // another attempt succeeded changes nothing.
+        if (closed || error?._tag === "SessionNotFoundError") return;
         const waits = error?.type === undefined || error.type === "rpc.unavailable";
-        if (!waits) sessions.delete(sessionID);
+        if (!waits) {
+          sessions.delete(sessionID);
+          pending.delete(sessionID);
+        }
         context.ui.toast.show({ variant: "error", message: `Sessionbus: ${error?.message || error}` });
       });
     };
@@ -80,10 +86,7 @@ export function createTui(environment = process.env, dependencies = {}) {
     });
     const stopCreated = context.data.on("session.created", (event) => {
       const sessionID = event?.data?.sessionID;
-      if (closed || !pending.has(sessionID)) return;
-      const title = pending.get(sessionID);
-      pending.delete(sessionID);
-      activate(sessionID, title);
+      if (!closed && pending.has(sessionID)) activate(sessionID);
     });
     const stopConnected = context.data.on("server.connected", () => {
       if (closed) return;
