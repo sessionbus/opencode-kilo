@@ -62,6 +62,23 @@ test("server: activate is idempotent, names the peer and delivers as one native 
   assert.ok(peers.every((value) => value.disposed));
 });
 
+test("server: concurrent activations of one session create one Peer", async (t) => {
+  const { peers, peer } = fakePeers();
+  const ctx = serverContext(t);
+  const held = [];
+  ctx.session.get = ({ sessionID }) => new Promise((resolve) => held.push(() => resolve({ id: sessionID, title: "native title" })));
+  const cleanup = await createServer({ peer })(ctx);
+  const first = ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] });
+  const second = ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] });
+  for (let i = 0; i < 5 && held.length < 2; i++) await flush();
+  assert.equal(held.length, 2);
+  for (const release of held) release();
+  await Promise.all([first, second]);
+  assert.equal(peers.length, 1);
+  await cleanup();
+  assert.deepEqual(peers.map((value) => value.disposed), [true]);
+});
+
 // Through the pinned kit's own message.deliver mapping: a failed native prompt
 // may already be admitted, so the bus gets an uncertain error, not a refusal.
 test("server: a failed native prompt is an uncertain outcome at the bus, never a refusal or a retry", async (t) => {

@@ -20,6 +20,8 @@ export function createServer(dependencies = {}) {
         // Idempotent: the TUI activates again after reconnects and unloads.
         if (peers.has(input.sessionID)) return {};
         const session = await ctx.session.get({ sessionID: input.sessionID });
+        // Native does not serialize handlers: a concurrent activate may have won.
+        if (peers.has(input.sessionID)) return {};
         const identity = hello(input, session, ctx.location.directory);
         const peer = connect(identity, async (_signal, message) => {
           try {
