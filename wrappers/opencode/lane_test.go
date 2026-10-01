@@ -36,10 +36,13 @@ type fakeNative struct {
 	history  []map[string]any
 	holds    map[string]func(http.ResponseWriter) // by prompt text
 	notify   chan map[string]string
+	drop     chan struct{}
+	slowGet  time.Duration
+	settled  map[string]bool // ask or form IDs another client already answered
 }
 
 func newFakeNative(t *testing.T) *fakeNative {
-	f := &fakeNative{events: make(chan string, 64), sessions: map[string]nativeSession{}, holds: map[string]func(http.ResponseWriter){}, notify: make(chan map[string]string, 16)}
+	f := &fakeNative{events: make(chan string, 64), sessions: map[string]nativeSession{}, holds: map[string]func(http.ResponseWriter){}, notify: make(chan map[string]string, 16), drop: make(chan struct{}), settled: map[string]bool{}}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.srv.Close)
 	return f
@@ -71,6 +74,8 @@ func (f *fakeNative) serve(w http.ResponseWriter, r *http.Request) {
 				flusher.Flush()
 			case <-r.Context().Done():
 				return
+			case <-f.drop:
+				return
 			}
 		}
 	case path == "/api/session" && r.Method == "POST":
@@ -82,7 +87,11 @@ func (f *fakeNative) serve(w http.ResponseWriter, r *http.Request) {
 	case len(parts) == 1 && r.Method == "GET":
 		f.mu.Lock()
 		s, ok := f.sessions[parts[0]]
+		slow := f.slowGet
 		f.mu.Unlock()
+		if parts[0] != "ses_lane" {
+			time.Sleep(slow)
+		}
 		if !ok {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
@@ -127,7 +136,13 @@ func (f *fakeNative) serve(w http.ResponseWriter, r *http.Request) {
 		b, _ := json.Marshal(body)
 		f.mu.Lock()
 		f.replies = append(f.replies, r.Method+" "+path+"?"+r.URL.RawQuery+" "+string(b))
+		settled := f.settled[parts[2]]
 		f.mu.Unlock()
+		if settled {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]string{"_tag": "PermissionNotFoundError"})
+			return
+		}
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		w.WriteHeader(http.StatusNoContent)
@@ -144,11 +159,10 @@ func breakResponse(w http.ResponseWriter) {
 
 type fakeHost struct {
 	client *nativeClient
-	lost   chan struct{}
 }
 
-func (h *fakeHost) start(context.Context, string, string, []string) (*nativeClient, <-chan struct{}, error) {
-	return h.client, h.lost, nil
+func (h *fakeHost) start(context.Context, string, string) (*nativeClient, error) {
+	return h.client, nil
 }
 func (h *fakeHost) bind(context.Context, *nativeClient, string, string) error { return nil }
 func (h *fakeHost) close() error                                              { return nil }
@@ -171,7 +185,7 @@ func newLaneFixture(t *testing.T, open kit.OpenOptions, resume string, setup fun
 	if setup != nil {
 		setup(native)
 	}
-	h := &fakeHost{client: &nativeClient{base: native.srv.URL, auth: "Basic test", http: &http.Client{Timeout: 10 * time.Second}}, lost: make(chan struct{})}
+	h := &fakeHost{client: &nativeClient{base: native.srv.URL, auth: "Basic test", http: &http.Client{Timeout: 10 * time.Second}}}
 	socket := filepath.Join(testsocket.Directory(t), "bus.sock")
 	l, err := net.Listen("unix", socket)
 	if err != nil {
@@ -491,14 +505,15 @@ func TestLaneDeclinesOnlyItsOwnSessionsAsks(t *testing.T) {
 	delivered(f.native, own)
 	f.native.emit("permission.asked", map[string]any{"id": "per_other", "sessionID": "ses_other"})
 	f.native.emit("permission.asked", map[string]any{"id": "per_child", "sessionID": "ses_child"})
-	f.native.emit("form.created", map[string]any{"form": map[string]string{"id": "frm_1", "sessionID": "ses_lane"}})
+	f.native.emit("form.created", map[string]any{"form": map[string]any{"id": "frm_1", "sessionID": "ses_lane", "metadata": map[string]string{"kind": "question"}}})
+	f.native.emit("form.created", map[string]any{"form": map[string]any{"id": "frm_2", "sessionID": "ses_lane", "metadata": map[string]string{"kind": "oauth"}}})
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		f.native.mu.Lock()
 		replies := strings.Join(f.native.replies, "\n")
 		f.native.mu.Unlock()
-		if strings.Contains(replies, "per_child") && strings.Contains(replies, "frm_1") {
-			if strings.Contains(replies, "per_other") || !strings.Contains(replies, `"decision":"reject"`) || !strings.Contains(replies, `"message":"Declined: `) || !strings.Contains(replies, "message=Declined") {
+		if strings.Contains(replies, "per_child") && strings.Contains(replies, "frm_2") {
+			if strings.Contains(replies, "per_other") || !strings.Contains(replies, `"decision":"reject"`) || !strings.Contains(replies, `"message":"Declined: `) || !strings.Contains(replies, "frm_1?message=Declined") || !strings.Contains(replies, "frm_2? ") {
 				t.Fatalf("replies = %s", replies)
 			}
 			break
@@ -540,7 +555,7 @@ func TestLaneNativeLossMakesTheRunUnavailable(t *testing.T) {
 	f := newLaneFixture(t, kit.OpenOptions{}, "", nil)
 	own := f.start(t, 1, "task")
 	delivered(f.native, own)
-	close(f.host.lost)
+	close(f.native.drop)
 	if status := f.status(t, "turn.wait", 1); status.State != "unavailable" {
 		t.Fatalf("status = %+v", status)
 	}
@@ -564,11 +579,11 @@ func TestLaneBypassResumeKeepsRulesAndEndsWithTheGrant(t *testing.T) {
 }
 
 func TestLaneArgumentsAndModel(t *testing.T) {
-	options, err := parseLaneOptions(kit.OpenOptions{Model: "deepseek/deepseek-v4-pro", Arguments: []string{"--agent", "build", "--log-level", "INFO", "--print-logs"}})
-	if err != nil || options.agent != "build" || options.model.ProviderID != "deepseek" || strings.Join(options.arguments, " ") != "--log-level INFO --print-logs" {
+	options, err := parseLaneOptions(kit.OpenOptions{Model: "deepseek/deepseek-v4-pro", Arguments: []string{"--agent=build"}})
+	if err != nil || options.agent != "build" || options.model.ProviderID != "deepseek" || options.model.ID != "deepseek-v4-pro" {
 		t.Fatalf("options = %+v %v", options, err)
 	}
-	for _, bad := range [][]string{{"--port", "1"}, {"--mdns"}, {"--auto"}, {"--agent", "a", "--agent", "b"}} {
+	for _, bad := range [][]string{{"--port", "1"}, {"--mdns"}, {"--auto"}, {"--print-logs"}, {"--agent", "a", "--agent", "b"}} {
 		if _, err := parseLaneOptions(kit.OpenOptions{Arguments: bad}); err == nil {
 			t.Fatalf("%v accepted", bad)
 		}
@@ -602,5 +617,67 @@ func TestLaneSuccessorDeliveryNeedsItsOwnTerminal(t *testing.T) {
 	succeeded(f.native)
 	if status := f.status(t, "turn.wait", 1); status.State != "done" || status.Result.Result != "AFTER" {
 		t.Fatalf("status = %+v", status)
+	}
+}
+
+// Asks of other sessions on a shared server cost lookups, never the lane.
+func TestLaneUnrelatedAsksDoNotEndTheLane(t *testing.T) {
+	f := newLaneFixture(t, kit.OpenOptions{}, "", func(n *fakeNative) {
+		n.slowGet = 100 * time.Millisecond
+		for i := 0; i < 9; i++ {
+			n.sessions[fmt.Sprintf("ses_other%d", i)] = nativeSession{ID: fmt.Sprintf("ses_other%d", i)}
+		}
+	})
+	own := f.start(t, 1, "task")
+	delivered(f.native, own)
+	for i := 0; i < 9; i++ {
+		f.native.emit("permission.asked", map[string]any{"id": fmt.Sprintf("per_%d", i), "sessionID": fmt.Sprintf("ses_other%d", i)})
+	}
+	f.answered(own, "OK")
+	succeeded(f.native)
+	if status := f.status(t, "turn.wait", 1); status.State != "done" {
+		t.Fatalf("status = %+v", status)
+	}
+	f.native.mu.Lock()
+	defer f.native.mu.Unlock()
+	if len(f.native.replies) != 0 {
+		t.Fatalf("replies = %v", f.native.replies)
+	}
+}
+
+// An ask another client already answered is not pending: skipping it keeps
+// the lane.
+func TestLaneSkipsAnAskAnotherClientSettled(t *testing.T) {
+	f := newLaneFixture(t, kit.OpenOptions{}, "", func(n *fakeNative) { n.settled["per_gone"] = true })
+	own := f.start(t, 1, "task")
+	delivered(f.native, own)
+	f.native.emit("permission.asked", map[string]any{"id": "per_gone", "sessionID": "ses_lane"})
+	f.answered(own, "OK")
+	succeeded(f.native)
+	if status := f.status(t, "turn.wait", 1); status.State != "done" || status.Result.Result != "OK" {
+		t.Fatalf("status = %+v", status)
+	}
+}
+
+// Only native's declared pre-admission errors refuse an input; a failure that
+// can follow admission leaves the outcome unknown.
+func TestLaneDeliverRefusalNeedsADeclaredPreAdmissionError(t *testing.T) {
+	answer := func(code int, tag string) func(http.ResponseWriter) {
+		return func(w http.ResponseWriter) {
+			w.WriteHeader(code)
+			json.NewEncoder(w).Encode(map[string]string{"_tag": tag})
+		}
+	}
+	f := newLaneFixture(t, kit.OpenOptions{}, "", func(n *fakeNative) {
+		n.holds["conflict"] = answer(http.StatusConflict, "ConflictError")
+		n.holds["wake"] = answer(http.StatusInternalServerError, "UnknownError")
+	})
+	own := f.start(t, 1, "task")
+	delivered(f.native, own)
+	if frame := f.answer(t, f.deliver(t, "conflict")); frame.Error != nil || !strings.Contains(string(frame.Result), `"rejected"`) {
+		t.Fatalf("declared refusal = %+v %s", frame.Error, frame.Result)
+	}
+	if frame := f.answer(t, f.deliver(t, "wake")); frame.Error == nil || frame.Error.Code != protocol.Internal {
+		t.Fatalf("post-admission failure = %+v %s", frame.Error, frame.Result)
 	}
 }

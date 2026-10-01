@@ -24,11 +24,26 @@ type nativeClient struct {
 	http *http.Client
 }
 
-// nativeStatus is a definite native answer that is not success: the request
-// reached native and was refused.
+// nativeStatus is a native answer that is not success.
 type nativeStatus struct {
 	code int
+	tag  string
 	body string
+}
+
+// refused reports a declared native error raised before native admits the
+// input: unauthorized, unknown session, invalid request or an ID conflict.
+// Any other failure can follow admission (native wakes the session after
+// admitting), so its outcome stays unknown.
+func (e *nativeStatus) refused() bool {
+	switch {
+	case e.code == 401 && e.tag == "UnauthorizedError",
+		e.code == 404 && e.tag == "SessionNotFoundError",
+		e.code == 400 && e.tag == "InvalidRequestError",
+		e.code == 409 && e.tag == "ConflictError":
+		return true
+	}
+	return false
 }
 
 func (e *nativeStatus) Error() string {
@@ -67,7 +82,11 @@ func (c *nativeClient) call(ctx context.Context, method, path string, body, out 
 		return errors.New("OpenCode response exceeds limit")
 	}
 	if response.StatusCode < 200 || response.StatusCode > 299 {
-		return &nativeStatus{code: response.StatusCode, body: strings.TrimSpace(string(b[:min(len(b), 512)]))}
+		var declared struct {
+			Tag string `json:"_tag"`
+		}
+		_ = json.Unmarshal(b, &declared)
+		return &nativeStatus{code: response.StatusCode, tag: declared.Tag, body: strings.TrimSpace(string(b[:min(len(b), 512)]))}
 	}
 	if out == nil || len(b) == 0 {
 		return nil

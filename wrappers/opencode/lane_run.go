@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
+	"slices"
 	"strings"
 
 	kit "github.com/antst/sessionbus/bus/sdk/go"
@@ -81,7 +82,7 @@ func (l *Lane) resolve(r *laneRun, id string, err error) bool {
 	case tracked:
 		delete(r.prompts, id)
 		var refused *nativeStatus
-		if !errors.As(err, &refused) {
+		if !errors.As(err, &refused) || !refused.refused() {
 			r.released[id] = true
 		}
 	}
@@ -102,6 +103,7 @@ func (l *Lane) observe(event nativeEvent) {
 	}
 	var data struct {
 		SessionID string          `json:"sessionID"`
+		ParentID  string          `json:"parentID"`
 		InboxID   string          `json:"inboxID"`
 		Reason    string          `json:"reason"`
 		ID        string          `json:"id"`
@@ -109,12 +111,19 @@ func (l *Lane) observe(event nativeEvent) {
 		Form      *struct {
 			ID        string `json:"id"`
 			SessionID string `json:"sessionID"`
+			Metadata  struct {
+				Kind string `json:"kind"`
+			} `json:"metadata"`
 		} `json:"form"`
 	}
 	_ = json.Unmarshal(event.Data, &data)
 	l.mu.Lock()
 	l.position++
 	at, r, session := l.position, l.active, l.session
+	// Native announces each session with its parent, in stream order.
+	if event.Type == "session.created" && data.ParentID != "" && l.lineage[data.ParentID] {
+		l.lineage[data.SessionID] = true
+	}
 	if r != nil && data.SessionID == session && session != "" {
 		switch event.Type {
 		case "session.inbox.enqueued":
@@ -153,49 +162,66 @@ func (l *Lane) observe(event nativeEvent) {
 			}
 		}
 	}
-	l.mu.Unlock()
+	var work *declineWork
 	switch {
 	case event.Type == "permission.asked" && data.ID != "":
-		l.decline(data.SessionID, "/permission/"+url.PathEscape(data.ID)+"/reply", "POST", map[string]string{"decision": "reject", "message": declined})
+		work = &declineWork{session: data.SessionID, method: "POST", path: "/permission/" + url.PathEscape(data.ID) + "/reply", body: map[string]string{"decision": "reject", "message": declined}, run: r, settled: []string{"PermissionNotFoundError"}}
 	case event.Type == "form.created" && data.Form != nil && data.Form.ID != "":
-		l.decline(data.Form.SessionID, "/form/"+url.PathEscape(data.Form.ID)+"?message="+url.QueryEscape(declined), "DELETE", nil)
+		// As native's headless runner: every form is cancelled; only a question
+		// gets the message that lets the model continue without an answer.
+		path := "/form/" + url.PathEscape(data.Form.ID)
+		if data.Form.Metadata.Kind == "question" {
+			path += "?message=" + url.QueryEscape(declined)
+		}
+		work = &declineWork{session: data.Form.SessionID, method: "DELETE", path: path, settled: []string{"FormNotFoundError", "FormAlreadySettledError"}}
+	}
+	l.mu.Unlock()
+	if work != nil {
+		l.decline(*work)
 	}
 }
 
-// decline answers a native ask or form of the lane's sessions; there is no
-// human in a lane. Asks of other sessions on the same server are left alone.
-func (l *Lane) decline(session, path, method string, body any) {
-	select {
-	case l.declines <- struct{}{}:
-	default:
-		l.fail(errors.New("OpenCode lane decline limit reached"))
+// declineWork is one native ask or form to answer, with the Run that was
+// active when native raised it and the native answers that mean it is no
+// longer pending.
+type declineWork struct {
+	session, method, path string
+	body                  any
+	run                   *laneRun
+	settled               []string
+}
+
+// decline answers a native ask or form of the lane's sessions in stream
+// order, inline in the event reader as native's own headless runner does; no
+// human is in a lane. Asks of other sessions on the same server are left
+// alone, and an ask another client already settled is skipped.
+func (l *Lane) decline(work declineWork) {
+	l.mu.Lock()
+	life, client := l.ctx, l.client
+	l.mu.Unlock()
+	if life == nil || client == nil {
 		return
 	}
-	l.workers.Add(1)
-	go func() {
-		defer l.workers.Done()
-		defer func() { <-l.declines }()
-		l.mu.Lock()
-		life, client := l.ctx, l.client
-		l.mu.Unlock()
-		if life == nil || client == nil {
-			return
-		}
-		belongs, err := l.belongs(life, session)
-		if err != nil || !belongs {
-			return
-		}
-		if method == "POST" {
+	belongs, err := l.belongs(life, work.session)
+	if err != nil || !belongs {
+		return
+	}
+	err = client.call(life, work.method, "/api/session/"+url.PathEscape(work.session)+work.path, work.body, nil)
+	var answered *nativeStatus
+	switch {
+	case err == nil:
+		// The explanatory label belongs to the Run native raised the ask in.
+		if work.run != nil && work.method == "POST" {
 			l.mu.Lock()
-			if l.active != nil {
-				l.active.rejected = true
+			if !work.run.final {
+				work.run.rejected = true
 			}
 			l.mu.Unlock()
 		}
-		if err := client.call(life, method, "/api/session/"+url.PathEscape(session)+path, body, nil); err != nil && life.Err() == nil {
-			l.fail(err)
-		}
-	}()
+	case errors.As(err, &answered) && slices.Contains(work.settled, answered.tag):
+	case life.Err() == nil:
+		l.fail(err)
+	}
 }
 
 // Run submits one input as a native prompt and reports the native terminal of

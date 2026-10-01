@@ -31,9 +31,6 @@ var (
 	wildcardRule = permissionRule{Action: "*", Resource: "*", Effect: "allow"}
 	laneRules    = []host.ArgumentRule{
 		{Name: "--agent", TakesValue: true},
-		{Name: "--print-logs"},
-		{Name: "--log-level", TakesValue: true},
-		{Name: "--cors", TakesValue: true},
 		{Name: "--hostname", TakesValue: true, ConflictField: "topology"},
 		{Name: "--port", TakesValue: true, ConflictField: "topology"},
 		{Name: "--stdio", ConflictField: "topology"},
@@ -71,9 +68,9 @@ type nativeSession struct {
 
 // laneHost supplies the native server one lane drives.
 type laneHost interface {
-	// start returns a client for the native server and a channel closed when
-	// that server is lost to this lane.
-	start(ctx context.Context, cwd, tools string, arguments []string) (*nativeClient, <-chan struct{}, error)
+	// start returns a client for the native server. Losing that server ends the
+	// lane's event stream, which ends the lane.
+	start(ctx context.Context, cwd, tools string) (*nativeClient, error)
 	// bind lets the session's Sessionbus tool reach the lane's endpoint before
 	// each Run.
 	bind(ctx context.Context, client *nativeClient, session, tools string) error
@@ -104,29 +101,27 @@ type Lane struct {
 	active    *laneRun
 	position  int
 	connected chan struct{}
-	lineage   map[string]bool
-	declines  chan struct{}
+	lineage   map[string]bool // native session -> whether it is the lane's session or a descendant
 	workers   sync.WaitGroup
 	closeOnce sync.Once
 	closeErr  error
 }
 
 func newLane(socket string, h laneHost) *Lane {
-	return &Lane{socket: socket, host: h, lineage: map[string]bool{}, declines: make(chan struct{}, 8), connected: make(chan struct{})}
+	return &Lane{socket: socket, host: h, lineage: map[string]bool{}, connected: make(chan struct{})}
 }
 
 func (l *Lane) SetCaller(c *kit.Caller) { l.caller = c }
 func (l *Lane) SetShutdown(f func())    { l.shutdown = f }
 
 func (l *Lane) Hello(context.Context) (kit.HelloDescription, error) {
-	return kit.HelloDescription{Product: opencodefamily.Product, SupportsMessageRun: true, SupportedOpenFields: []string{"cwd", "permission_mode", "model", "arguments"}, ExtraArguments: []kit.ExtraArgument{{Name: "--agent", Description: "Native agent", TakesValue: true}, {Name: "--print-logs", Description: "Print native logs"}, {Name: "--log-level", Description: "Native log level", TakesValue: true}, {Name: "--cors", Description: "Native allowed CORS origin", TakesValue: true}}}, nil
+	return kit.HelloDescription{Product: opencodefamily.Product, SupportsMessageRun: true, SupportedOpenFields: []string{"cwd", "permission_mode", "model", "arguments"}, ExtraArguments: []kit.ExtraArgument{{Name: "--agent", Description: "Native agent", TakesValue: true}}}, nil
 }
 
 type laneOptions struct {
-	arguments []string
-	agent     string
-	model     *modelRef
-	bypass    bool
+	agent  string
+	model  *modelRef
+	bypass bool
 }
 
 func parseLaneOptions(open kit.OpenOptions) (laneOptions, error) {
@@ -146,15 +141,7 @@ func parseLaneOptions(open kit.OpenOptions) (laneOptions, error) {
 		return options, err
 	}
 	for index := 0; index < len(validated); index++ {
-		name, value, attached := strings.Cut(validated[index], "=")
-		if name != "--agent" {
-			options.arguments = append(options.arguments, validated[index])
-			if !attached && (name == "--log-level" || name == "--cors") {
-				index++
-				options.arguments = append(options.arguments, validated[index])
-			}
-			continue
-		}
+		_, value, attached := strings.Cut(validated[index], "=")
 		if !attached {
 			index++
 			value = validated[index]
@@ -237,22 +224,14 @@ func (l *Lane) Open(ctx context.Context, request kit.OpenRequest) (result kit.Op
 	l.mu.Lock()
 	l.tools, l.closeTool = tools, closeTools
 	l.mu.Unlock()
-	client, lost, err := l.host.start(startup, cwd, tools, options.arguments)
+	client, err := l.host.start(startup, cwd, tools)
 	if err != nil {
 		return result, err
 	}
 	l.mu.Lock()
 	l.client = client
 	l.mu.Unlock()
-	l.workers.Add(2)
-	go func() {
-		defer l.workers.Done()
-		select {
-		case <-lost:
-			l.fail(errors.New("OpenCode server lost"))
-		case <-l.ctx.Done():
-		}
-	}()
+	l.workers.Add(1)
 	go func() {
 		defer l.workers.Done()
 		err := client.events(l.ctx, l.observe)
@@ -416,14 +395,19 @@ func (l *Lane) ToolAction(ctx context.Context, sessionID, _, action string, args
 }
 
 // belongs reports whether a native session is the lane's session or one of
-// its descendants, by native parentID.
+// its descendants, by native parentID. Both answers are remembered, as native's
+// own headless runner does; a failed lookup is not.
 func (l *Lane) belongs(ctx context.Context, id string) (bool, error) {
+	var walked []string
+	answer := false
 	for depth := 0; depth < 32 && id != ""; depth++ {
 		l.mu.Lock()
-		known, client, life := l.lineage[id], l.client, l.ctx
+		known, cached := l.lineage[id]
+		client, life := l.client, l.ctx
 		l.mu.Unlock()
-		if known {
-			return true, nil
+		if cached {
+			answer = known
+			break
 		}
 		if client == nil || life == nil {
 			return false, errors.New("OpenCode lane unavailable")
@@ -439,21 +423,15 @@ func (l *Lane) belongs(ctx context.Context, id string) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		next := got.Data.ParentID
-		if next != "" {
-			l.mu.Lock()
-			parentKnown := l.lineage[next]
-			if parentKnown {
-				l.lineage[id] = true
-			}
-			l.mu.Unlock()
-			if parentKnown {
-				return true, nil
-			}
-		}
-		id = next
+		walked = append(walked, id)
+		id = got.Data.ParentID
 	}
-	return false, nil
+	l.mu.Lock()
+	for _, seen := range walked {
+		l.lineage[seen] = answer
+	}
+	l.mu.Unlock()
+	return answer, nil
 }
 
 // Deliver steers a message into the active Run's native execution.
@@ -488,7 +466,7 @@ func (l *Lane) Deliver(ctx context.Context, request kit.DeliveryRequest, run *ki
 	switch {
 	case admitted:
 		return kit.DeliveryReceipt{Disposition: "injected"}, nil
-	case errors.As(err, &refused):
+	case errors.As(err, &refused) && refused.refused():
 		return kit.DeliveryReceipt{Disposition: "rejected", Reason: refused.Error()}, nil
 	default:
 		return kit.DeliveryReceipt{}, &kit.ProtocolError{Code: protocol.Internal, Message: "internal", Data: json.RawMessage(`"OpenCode prompt outcome unknown"`)}
