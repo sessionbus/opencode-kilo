@@ -41,8 +41,8 @@ func (p *Wrapper) queue(run *kit.Run, text string) bool {
 	return true
 }
 
-// takeInbox removes the Run's queued input for one native write. As in the
-// interactive owner, taken input is attempted once and never requeued.
+// takeInbox removes the Run's queued input once its native write is accepted;
+// the caller holds p.mu.
 func takeInbox(t *laneRun) string {
 	text := strings.Join(t.inbox, "\n\n")
 	t.inbox, t.inboxBytes = nil, 0
@@ -51,6 +51,9 @@ func takeInbox(t *laneRun) string {
 
 // LaneInput answers the hidden hook tool: it writes the active Run's queued
 // input as the requested native part and completes once the write settles.
+// As in the interactive owner, input leaves the FIFO only when the write is
+// accepted: a refused write keeps it for the next pull or the Run's last
+// message, and an accepted write is attempted once and never replayed.
 func (p *Wrapper) LaneInput(raw json.RawMessage) (<-chan error, error) {
 	var in struct {
 		SessionID string `json:"session_id"`
@@ -61,20 +64,30 @@ func (p *Wrapper) LaneInput(raw json.RawMessage) (<-chan error, error) {
 		return nil, errors.New("invalid native input request")
 	}
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	t := p.active
 	if in.SessionID != p.id || t == nil || t.closed || len(t.inbox) == 0 || p.client == nil {
-		p.mu.Unlock()
 		return nil, errNoLaneInput
 	}
-	text := takeInbox(t)
-	client, life := p.client, p.ctx
-	p.mu.Unlock()
+	part := map[string]string{"id": in.PartID, "sessionID": in.SessionID, "messageID": in.MessageID, "type": "text", "text": strings.Join(t.inbox, "\n\n")}
+	b, err := encodeNativeFor(p.kind, part)
+	if err != nil {
+		return nil, err
+	}
+	request, err := p.client.prepare(p.ctx, http.MethodPatch, sessionPath(in.SessionID)+"/message/"+url.PathEscape(in.MessageID)+"/part/"+url.PathEscape(in.PartID), b)
+	if err != nil {
+		return nil, err
+	}
+	op, err := p.client.begin(request, 200)
+	if err != nil {
+		return nil, err
+	}
+	takeInbox(t)
 	done := make(chan error, 1)
 	p.workers.Add(1)
 	go func() {
 		defer p.workers.Done()
-		part := map[string]string{"id": in.PartID, "sessionID": in.SessionID, "messageID": in.MessageID, "type": "text", "text": text}
-		_, err := client.call(life, http.MethodPatch, sessionPath(in.SessionID)+"/message/"+url.PathEscape(in.MessageID)+"/part/"+url.PathEscape(in.PartID), part, 200)
+		_, err := op.wait()
 		done <- err
 	}()
 	return done, nil

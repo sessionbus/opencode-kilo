@@ -75,3 +75,31 @@ func TestLaneBusyInputIsWrittenAsTheRequestedPartOnce(t *testing.T) {
 		t.Fatalf("after the final check: %v", err)
 	}
 }
+
+// A write the HTTP client refuses before submission keeps the input queued
+// for the next pull, as the interactive owner keeps never-attempted input.
+func TestLaneBusyInputRefusedBeforeSubmissionStaysQueued(t *testing.T) {
+	life, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+	run := &kit.Run{}
+	client := newLaneHTTP("http://127.0.0.1:1", "/work", "sessionbus", "secret")
+	p := &Wrapper{ctx: life, cancel: cancel, id: "ses_lane", client: client}
+	t.Cleanup(p.workers.Wait)
+	p.active = &laneRun{run: run}
+	if !p.queue(run, "KEEP") {
+		t.Fatal("queue refused")
+	}
+	// Exhaust the client's work slots: begin refuses without submitting.
+	for len(client.slots) < cap(client.slots) {
+		client.slots <- struct{}{}
+	}
+	request := json.RawMessage(`{"session_id":"ses_lane","message_id":"msg_user","part_id":"prt_000000000002ABCDEFGHIJKLMN"}`)
+	if _, err := p.LaneInput(request); err == nil || errors.Is(err, errNoLaneInput) {
+		t.Fatalf("refused write: %v", err)
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.active.inbox) != 1 || p.active.inbox[0] != "KEEP" {
+		t.Fatalf("inbox = %q", p.active.inbox)
+	}
+}
