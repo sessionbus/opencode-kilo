@@ -93,3 +93,25 @@ func TestCompiledInteractiveLaunchExecsNative(t *testing.T) {
 		})
 	}
 }
+
+func TestLaunchCreatesSessionOnlyWhenNoneIsSelected(t *testing.T) {
+	for _, tc := range []struct {
+		args   []string
+		create bool
+	}{
+		{nil, true},
+		{[]string{"/work/project"}, true},
+		{[]string{"--auto", "--log-level", "debug"}, true},
+		{[]string{"--prompt", "hello"}, false},
+		{[]string{"--prompt=hello"}, false},
+		{[]string{"-s", "ses_x"}, false},
+		{[]string{"--session=ses_x"}, false},
+		{[]string{"-c"}, false},
+		{[]string{"--continue"}, false},
+		{[]string{"--", "--prompt", "literal"}, true},
+	} {
+		if got := !selectsSession(tc.args); got != tc.create {
+			t.Fatalf("%v: create=%v, want %v", tc.args, got, tc.create)
+		}
+	}
+}

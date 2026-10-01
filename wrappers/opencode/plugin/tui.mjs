@@ -47,6 +47,16 @@ export function createTui(environment = process.env, dependencies = {}) {
       });
       return dispose;
     });
+    // A launch that selects no session gets one, so it is reachable while it
+    // waits; showing it activates it like any other.
+    if (launch.create && context.location?.directory) {
+      void (async () => {
+        const session = await context.client.session.create({ ...(name ? { title: name } : {}), location: { directory: context.location.directory } });
+        if (!closed) context.ui.router.navigate({ type: "session", sessionID: session.id });
+      })().catch((error) => {
+        if (!closed) context.ui.toast.show({ variant: "error", message: `Sessionbus: ${error?.message || error}` });
+      });
+    }
     const stopShutdown = context.data.on("location.shutdown", (event) => {
       if (closed || !event.location) return;
       for (const [sessionID, location] of sessions) {

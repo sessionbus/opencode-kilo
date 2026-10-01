@@ -139,14 +139,17 @@ function tuiContext() {
     calls, toasts,
     fail: undefined,
     client: {
-      session: { update: async (input) => { calls.push(["update", input]); } },
+      session: {
+        update: async (input) => { calls.push(["update", input]); },
+        create: async (input) => { calls.push(["create", input]); return { id: "ses_new", location: input.location }; },
+      },
       rpc: () => ({ activate: async (input, options) => { calls.push(["activate", input, options]); if (ctx.fail) throw ctx.fail; return {}; } }),
     },
     data: {
       session: { get: (id) => ({ id, location: { directory: "/work" } }) },
       on: (type, handler) => { listeners.set(type, handler); return () => listeners.delete(type); },
     },
-    ui: { router: { current: () => route }, toast: { show: (value) => toasts.push(value) } },
+    ui: { router: { current: () => route, navigate: (destination) => { calls.push(["navigate", destination]); route = destination; effect(); } }, toast: { show: (value) => toasts.push(value) } },
     show(id) { route = { type: "session", sessionID: id }; effect(); },
     emit(type, event = {}) { listeners.get(type)?.(event); },
     listening: (type) => listeners.has(type),
@@ -172,6 +175,22 @@ test("tui: inactive without its own launch; names only the first shown session o
     ["activate", { sessionID: "ses_a", socket: "/bus.sock", groups: ["team"], name: "worker" }, { location: { directory: "/work" } }],
     ["activate", { sessionID: "ses_b", socket: "/bus.sock", groups: ["team"] }, { location: { directory: "/work" } }],
   ]);
+});
+
+test("tui: a launch that selects no session creates one, named, and activates it", async () => {
+  const { ctx, solid } = tuiContext();
+  await createTui(launch({ create: true }), { solid })(ctx);
+  await flush(); await flush();
+  assert.deepEqual(ctx.calls, [
+    ["create", { title: "worker", location: { directory: "/work" } }],
+    ["navigate", { type: "session", sessionID: "ses_new" }],
+    ["update", { sessionID: "ses_new", title: "worker" }],
+    ["activate", { sessionID: "ses_new", socket: "/bus.sock", groups: ["team"], name: "worker" }, { location: { directory: "/work" } }],
+  ]);
+  const { ctx: other, solid: otherSolid } = tuiContext();
+  await createTui(launch(), { solid: otherSolid })(other);
+  await flush();
+  assert.equal(other.calls.length, 0);
 });
 
 test("tui: native unload of its directory and reconnect each trigger one activation; cleanup stops all", async () => {
