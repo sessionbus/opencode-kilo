@@ -220,7 +220,9 @@ test("server: the tool serves only activated sessions, which alone see it", asyn
 // Fake native TUI context with a controllable route and event stream.
 function tuiContext() {
   const listeners = new Map(), calls = [], toasts = [];
-  let route = { type: "home" }, effect;
+  let route = { type: "home" };
+  const effects = new Set();
+  const rerun = () => { for (const effect of [...effects]) effect(); };
   const ctx = {
     location: { directory: "/work" },
     calls, toasts,
@@ -236,12 +238,14 @@ function tuiContext() {
       session: { get: (id) => ({ id, location: { directory: "/work" } }) },
       on: (type, handler) => { listeners.set(type, handler); return () => listeners.delete(type); },
     },
-    ui: { router: { current: () => route, navigate: (destination) => { calls.push(["navigate", destination]); route = destination; effect(); } }, toast: { show: (value) => toasts.push(value) } },
-    show(id) { route = { type: "session", sessionID: id }; effect(); },
+    ui: { router: { current: () => route, navigate: (destination) => { calls.push(["navigate", destination]); route = destination; rerun(); } }, toast: { show: (value) => toasts.push(value) } },
+    show(id) { route = { type: "session", sessionID: id }; rerun(); },
+    // Native's server-synced location arriving or changing.
+    locate(location) { ctx.location = location; rerun(); },
     emit(type, event = {}) { listeners.get(type)?.(event); },
     listening: (type) => listeners.has(type),
   };
-  const solid = { createRoot: (body) => body(() => { effect = () => {}; }), createEffect: (body) => { effect = body; body(); } };
+  const solid = { createRoot: (body) => body(() => effects.clear()), createEffect: (body) => { effects.add(body); body(); } };
   return { ctx, solid };
 }
 const launch = (extra = {}) => ({ SESSIONBUS_OPENCODE_LAUNCH: JSON.stringify({ pid: process.pid, socket: "/bus.sock", name: "worker", groups: ["team"], ...extra }) });
@@ -278,6 +282,28 @@ test("tui: a launch that selects no session creates one, named, and activates it
   await createTui(launch(), { solid: otherSolid })(other);
   await flush();
   assert.equal(other.calls.length, 0);
+});
+
+test("tui: launch-and-wait creates once, when native's location becomes available, never after cleanup", async () => {
+  const { ctx, solid } = tuiContext();
+  ctx.location = undefined;
+  await createTui(launch({ create: true }), { solid })(ctx);
+  await flush();
+  assert.deepEqual(ctx.calls, []);
+  ctx.locate({ directory: "/work" }); await flush(); await flush();
+  ctx.locate({ directory: "/work" }); await flush();
+  assert.deepEqual(ctx.calls, [
+    ["create", { title: "worker", location: { directory: "/work" } }],
+    ["navigate", { type: "session", sessionID: "ses_new" }],
+    ["update", { sessionID: "ses_new", title: "worker" }],
+    ["activate", { sessionID: "ses_new", socket: "/bus.sock", groups: ["team"], name: "worker" }, { location: { directory: "/work" } }],
+  ]);
+  const { ctx: early, solid: earlySolid } = tuiContext();
+  early.location = undefined;
+  const cleanup = await createTui(launch({ create: true }), { solid: earlySolid })(early);
+  await cleanup();
+  early.locate({ directory: "/work" }); await flush();
+  assert.deepEqual(early.calls, []);
 });
 
 test("tui: native unload of its directory and reconnect each trigger one activation; cleanup stops all", async () => {
