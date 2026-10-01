@@ -261,6 +261,15 @@ test("on the delivery step the turn is last, before an unfinished assistant, in 
   assert.deepEqual(later.map((message) => message.info.role), ["user", "assistant", "user", "assistant"]);
 });
 
+test("after compaction a retained handoff stays after the message it was stored on", () => {
+  // Compacted call array: [compaction user, summary, retained task and its step, continue user]; the summary completed last.
+  const part = handed("msg_task", base + 500);
+  const messages = [prompt("msg_compact", base + 900), reply("msg_summary", base + 950, base + 1000), prompt("msg_task", base, [part]),
+    reply("msg_a1", base + 100, base + 600), prompt("msg_continue", base + 1100)];
+  placeHandoffs(messages, base + 2000);
+  assert.deepEqual(messages.map((message) => message.info.id), ["msg_compact", "msg_summary", "msg_task", `msg_${part.id.slice(4)}`, "msg_a1", "msg_continue"]);
+});
+
 test("a part with no usable pull time, other text and a delivery that is the message itself stay in place", () => {
   const future = prompt("msg_future", base, [handed("msg_future", base + 5000)]);
   const undated = prompt("msg_undated", base, [handed("msg_undated", base + 10)]); delete undated.info.time;

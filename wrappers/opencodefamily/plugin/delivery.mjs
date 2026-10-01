@@ -48,7 +48,7 @@ function pullTime(id, created, now) {
 // was pulled for, and native dates every user message by its creation, so the
 // model would read it as part of the original task. In this call's array only,
 // each such part becomes its own user turn at its pull time: before the first
-// assistant that completed after it or has not completed, else at the end.
+// later assistant that completed after it or has not completed, else at the end.
 // Its text, the stored messages and native's own records stay as they are.
 export function placeHandoffs(messages, now = Date.now()) {
   const moved = [];
@@ -59,14 +59,17 @@ export function placeHandoffs(messages, now = Date.now()) {
       const time = index > first && part?.type === "text" && typeof part.text === "string" && part.text.startsWith(deliveryEnvelope)
         ? pullTime(part.id, message.info.time?.created, now) : undefined;
       if (time === undefined) return true;
-      moved.push({ time, entry: { info: { ...message.info, id: `msg_${part.id.slice(4)}`, time: { ...message.info.time, created: time } }, parts: [part] } });
+      moved.push({ time, origin: message, entry: { info: { ...message.info, id: `msg_${part.id.slice(4)}`, time: { ...message.info.time, created: time } }, parts: [part] } });
       return false;
     });
     if (kept.length !== message.parts.length) message.parts = kept;
   }
   moved.sort((a, b) => a.time - b.time);
-  for (const { time, entry } of moved) {
-    const at = messages.findIndex((message) => message?.info?.role === "assistant" && !(message.info.time?.completed <= time));
+  for (const { time, origin, entry } of moved) {
+    // Never before the message it was stored on (a compacted history can place
+    // a later-completed summary ahead of it).
+    const from = messages.indexOf(origin) + 1;
+    const at = messages.findIndex((message, index) => index >= from && message?.info?.role === "assistant" && !(message.info.time?.completed <= time));
     messages.splice(at < 0 ? messages.length : at, 0, entry);
   }
 }
