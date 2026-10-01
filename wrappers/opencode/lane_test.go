@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -158,14 +159,22 @@ func breakResponse(w http.ResponseWriter) {
 }
 
 type fakeHost struct {
-	client *nativeClient
+	client  *nativeClient
+	mu      sync.Mutex
+	bindErr error
+	binds   int
 }
 
 func (h *fakeHost) start(context.Context, string, string) (*nativeClient, error) {
 	return h.client, nil
 }
-func (h *fakeHost) bind(context.Context, *nativeClient, string, string) error { return nil }
-func (h *fakeHost) close() error                                              { return nil }
+func (h *fakeHost) bind(context.Context, *nativeClient, string, string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.binds++
+	return h.bindErr
+}
+func (h *fakeHost) close() error { return nil }
 
 type laneFixture struct {
 	native  *fakeNative
@@ -180,6 +189,24 @@ type laneFixture struct {
 }
 
 func newLaneFixture(t *testing.T, open kit.OpenOptions, resume string, setup func(*fakeNative)) *laneFixture {
+	t.Helper()
+	f := newUnopenedLaneFixture(t, setup)
+	var opened kit.OpenResult
+	if frame := f.open(t, open, resume); frame.Error != nil {
+		t.Fatalf("open: %+v", frame.Error)
+	} else if json.Unmarshal(frame.Result, &opened) != nil || opened.SessionID != "ses_lane" {
+		t.Fatalf("open result %s", frame.Result)
+	}
+	return f
+}
+
+func (f *laneFixture) open(t *testing.T, open kit.OpenOptions, resume string) protocol.Frame {
+	t.Helper()
+	open.Cwd = t.TempDir()
+	return f.answer(t, f.begin(t, "session.open", kit.OpenRequest{Name: "lane@local", Groups: []string{}, ResumeSessionID: resume, Open: open}))
+}
+
+func newUnopenedLaneFixture(t *testing.T, setup func(*fakeNative)) *laneFixture {
 	t.Helper()
 	native := newFakeNative(t)
 	if setup != nil {
@@ -242,13 +269,6 @@ func newLaneFixture(t *testing.T, open kit.OpenOptions, resume string, setup fun
 	case <-hello:
 	case <-ctx.Done():
 		t.Fatal(ctx.Err())
-	}
-	open.Cwd = t.TempDir()
-	var opened kit.OpenResult
-	if frame := <-f.begin(t, "session.open", kit.OpenRequest{Name: "lane@local", Groups: []string{}, ResumeSessionID: resume, Open: open}); frame.Error != nil {
-		t.Fatalf("open: %+v", frame.Error)
-	} else if json.Unmarshal(frame.Result, &opened) != nil || opened.SessionID != "ses_lane" {
-		t.Fatalf("open result %s", frame.Result)
 	}
 	return f
 }
@@ -345,6 +365,24 @@ func delivered(f *fakeNative, id string) {
 
 func succeeded(f *fakeNative) {
 	f.emit("session.execution.succeeded", map[string]any{"sessionID": "ses_lane"})
+}
+
+// A lane whose session cannot bind the native Sessionbus plugin is refused at
+// Open, before it is presented as ready; a ready lane has already bound once.
+func TestLaneOpenRequiresTheSessionbusBinding(t *testing.T) {
+	f := newUnopenedLaneFixture(t, nil)
+	f.host.mu.Lock()
+	f.host.bindErr = errors.New("OpenCode answered 400: RPC is unavailable: sessionbus")
+	f.host.mu.Unlock()
+	if frame := f.open(t, kit.OpenOptions{}, ""); frame.Error == nil || !strings.Contains(string(frame.Error.Data)+frame.Error.Message, "RPC is unavailable: sessionbus") {
+		t.Fatalf("open without the plugin: %+v", frame.Error)
+	}
+	g := newLaneFixture(t, kit.OpenOptions{}, "", nil)
+	g.host.mu.Lock()
+	defer g.host.mu.Unlock()
+	if g.host.binds != 1 {
+		t.Fatalf("binds at Open = %d", g.host.binds)
+	}
 }
 
 func TestLaneRunCompletesAtItsNativeTerminal(t *testing.T) {

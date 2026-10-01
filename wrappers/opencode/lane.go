@@ -247,6 +247,13 @@ func (l *Lane) Open(ctx context.Context, request kit.OpenRequest) (result kit.Op
 	if err != nil {
 		return result, err
 	}
+	// A lane is ready only once its session's Sessionbus tool is bound: a
+	// missing or unloaded native plugin refuses Open instead of failing the
+	// first Run. Each Run binds again, as a location reload or service
+	// restart drops the binding.
+	if err = l.host.bind(startup, client, session, tools); err != nil {
+		return result, err
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if ctx.Err() != nil || l.ctx.Err() != nil || l.closing {
