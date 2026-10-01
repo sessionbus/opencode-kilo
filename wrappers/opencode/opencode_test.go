@@ -29,4 +29,12 @@ func TestInteractiveArity(t *testing.T) {
 	if err != nil || native || !slices.Equal(plan.Args, []string{"--server", "service", "-c"}) {
 		t.Fatalf("native server value = %#v/%v/%v", plan, native, err)
 	}
+	// A global value flag's value is never the native subcommand of the same
+	// name ("debug"), in either spelling.
+	for _, args := range [][]string{{"--log-level", "debug", "-g", "team"}, {"--log-level=debug", "-g", "team"}, {"--completions", "bash", "-g", "team"}} {
+		plan, native, err = InteractivePlan(args, []string{"PATH=/bin"})
+		if err != nil || native || !slices.Equal(plan.Args, args[:len(args)-2]) || !slices.Contains(plan.Env, host.GroupsEnv+`=["team"]`) {
+			t.Fatalf("global value flag %v = %#v/%v/%v", args, plan, native, err)
+		}
+	}
 }

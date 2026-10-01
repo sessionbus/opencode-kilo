@@ -14,8 +14,8 @@ import (
 	"github.com/sessionbus/peer-common/host"
 )
 
-// OpenCode v2 TUI options that consume the next argument.
-var openCodeInteractiveValueOptions = []string{"-s", "--session", "--prompt", "--server"}
+// OpenCode v2 TUI and global options that consume the next argument.
+var openCodeInteractiveValueOptions = []string{"-s", "--session", "--prompt", "--server", "--log-level", "--completions"}
 
 var kiloInteractiveValueOptions = []string{"--log-level", "--port", "--hostname", "--mdns-domain", "--mdnsDomain", "--cors", "-m", "--model", "-s", "--session", "--prompt", "--agent", "--worktree", "--replay-limit", "--replayLimit"}
 
