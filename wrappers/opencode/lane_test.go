@@ -42,6 +42,7 @@ type fakeNative struct {
 	slowGet  time.Duration
 	settled  map[string]bool // ask or form IDs another client already answered
 	withdraw int             // status for inbox withdrawals; zero answers 204
+	halt     func() int      // runs before the interrupt answer; nonzero is its status
 }
 
 func newFakeNative(t *testing.T) *fakeNative {
@@ -128,7 +129,14 @@ func (f *fakeNative) serve(w http.ResponseWriter, r *http.Request) {
 	case len(parts) == 2 && parts[1] == "interrupt":
 		f.mu.Lock()
 		f.replies = append(f.replies, "interrupt "+r.URL.RawQuery)
+		halt := f.halt
 		f.mu.Unlock()
+		if halt != nil {
+			if status := halt(); status != 0 {
+				w.WriteHeader(status)
+				return
+			}
+		}
 		json.NewEncoder(w).Encode(map[string]any{"interrupted": true})
 	case len(parts) == 3 && parts[1] == "inbox" && r.Method == "DELETE":
 		f.mu.Lock()
@@ -886,6 +894,37 @@ func TestLaneSteerAnsweredBeforeTheTerminalIsWithdrawnOnceByTheRun(t *testing.T)
 	f.status(t, "turn.wait", 1)
 	if got := f.native.withdrawn(); !slices.Equal(got, []string{early}) {
 		t.Fatalf("withdrawn by the Run = %q", got)
+	}
+}
+
+// An interrupt call that fails after native already ended the Run keeps it
+// cancelled, so a steer answering later is still withdrawn.
+func TestLaneInterruptErrorAfterTheTerminalKeepsTheRunCancelled(t *testing.T) {
+	release := make(chan struct{})
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	f := newLaneFixture(t, kit.OpenOptions{}, "", func(n *fakeNative) {
+		n.holds["late"] = func(w http.ResponseWriter) {
+			<-release
+			json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{}})
+		}
+		n.halt = func() int {
+			// The Run ends and takes its snapshot before the call fails.
+			n.emit("session.execution.interrupted", map[string]any{"sessionID": "ses_lane", "reason": "user"})
+			time.Sleep(300 * time.Millisecond)
+			return http.StatusBadGateway
+		}
+	})
+	t.Cleanup(unblock)
+	own := f.start(t, 1, "task")
+	delivered(f.native, own)
+	receipt := f.deliver(t, "late")
+	late := f.prompt(t, "late")
+	f.interrupt(t)
+	unblock()
+	f.answer(t, receipt)
+	if got := f.native.withdrawn(); !slices.Equal(got, []string{late, late}) {
+		t.Fatalf("withdrawn = %q", got)
 	}
 }
 

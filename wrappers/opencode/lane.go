@@ -508,8 +508,11 @@ func (l *Lane) Interrupt(ctx context.Context, run *kit.Run) error {
 	}
 	err := client.call(ctx, "POST", "/api/session/"+url.PathEscape(session)+"/interrupt?resume=false", struct{}{}, &answer)
 	if err != nil {
+		// A Run native already ended stays cancelled: its withdrawal is due.
 		l.mu.Lock()
-		r.cancelled = false
+		if !r.final {
+			r.cancelled = false
+		}
 		l.mu.Unlock()
 	}
 	return err
