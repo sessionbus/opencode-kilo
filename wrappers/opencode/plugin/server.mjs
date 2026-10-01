@@ -14,37 +14,31 @@ import { OwnedPeer } from "./peer.mjs";
 export function createServer(dependencies = {}) {
   const connect = dependencies.peer || ((identity, deliver, env) => new OwnedPeer(identity, deliver, env));
   return async function setup(ctx) {
+    // sessionID -> { peer, socket, groups } for this instance only.
     const peers = new Map();
-    // A native Task child acts for the activated session it descends from.
-    const owner = async (sessionID) => {
-      for (let id = sessionID, depth = 0; id && depth < 16; depth++) {
-        const peer = peers.get(id);
-        if (peer) return peer;
-        id = (await ctx.session.get({ sessionID: id }).catch(() => undefined))?.parentID;
-      }
-      return undefined;
+    const attach = async (sessionID, binding) => {
+      const session = await ctx.session.get({ sessionID });
+      // Native does not serialize handlers: a concurrent attach may have won.
+      if (peers.has(sessionID)) return;
+      const identity = hello(sessionID, binding, session, ctx.location.directory);
+      const peer = connect(identity, async (_signal, message) => {
+        try {
+          await ctx.session.prompt({ sessionID, text: renderDelivery(message), delivery: "steer" });
+        } catch (error) {
+          // Native may already have admitted it: an uncertain outcome, never a refusal.
+          throw new ProtocolError({ code: -32603, message: "internal", data: String(error?.message || error) });
+        }
+        return { disposition: "injected" };
+      }, { SESSIONBUS_SOCKET: binding.socket });
+      peers.set(sessionID, { peer, socket: binding.socket, groups: binding.groups });
+      peer.signal.addEventListener("abort", () => {
+        if (peers.get(sessionID)?.peer === peer) peers.delete(sessionID);
+      }, { once: true });
     };
     await ctx.rpc.register(contract, {
       activate: async (input) => {
         // Idempotent: the TUI activates again after reconnects and unloads.
-        if (peers.has(input.sessionID)) return {};
-        const session = await ctx.session.get({ sessionID: input.sessionID });
-        // Native does not serialize handlers: a concurrent activate may have won.
-        if (peers.has(input.sessionID)) return {};
-        const identity = hello(input, session, ctx.location.directory);
-        const peer = connect(identity, async (_signal, message) => {
-          try {
-            await ctx.session.prompt({ sessionID: input.sessionID, text: renderDelivery(message), delivery: "steer" });
-          } catch (error) {
-            // Native may already have admitted it: an uncertain outcome, never a refusal.
-            throw new ProtocolError({ code: -32603, message: "internal", data: String(error?.message || error) });
-          }
-          return { disposition: "injected" };
-        }, { SESSIONBUS_SOCKET: input.socket });
-        peers.set(input.sessionID, peer);
-        peer.signal.addEventListener("abort", () => {
-          if (peers.get(input.sessionID) === peer) peers.delete(input.sessionID);
-        }, { once: true });
+        if (!peers.has(input.sessionID)) await attach(input.sessionID, input);
         return {};
       },
     });
@@ -54,41 +48,51 @@ export function createServer(dependencies = {}) {
       input: declaration.inputSchema,
       options: { codemode: false },
       execute: async (input, context) => {
-        const peer = await owner(context.sessionID);
-        if (!peer) throw new Error("Sessionbus is not active for this OpenCode session");
+        const entry = peers.get(context.sessionID);
+        if (!entry) throw new Error("Sessionbus is not active for this OpenCode session");
         if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length !== 2 || !Object.hasOwn(input, "action") || !Object.hasOwn(input, "arguments")) throw new Error("expected Sessionbus action and arguments");
-        return { content: JSON.stringify(await peer.action(input.action, input.arguments, context.signal)) };
+        return { content: JSON.stringify(await entry.peer.action(input.action, input.arguments, context.signal)) };
       },
     }));
-    // Only activated sessions and their Task children see the tool.
-    await ctx.session.hook("context", async (request) => {
-      if (!(await owner(request.sessionID))) delete request.tools.sessionbus;
+    // Only attached sessions see the tool.
+    await ctx.session.hook("context", (request) => {
+      if (!peers.has(request.sessionID)) delete request.tools.sessionbus;
     });
-    // A deleted native session leaves the bus; a renamed one says hello again
-    // under its new title (a title outside the bus name grammar keeps the old).
+    // One native event loop:
+    // - a native Task child of an attached session becomes its own peer, with
+    //   its own ID and title and the parent's groups;
+    // - a deleted session leaves the bus;
+    // - a renamed one says hello again under its new title (a title outside
+    //   the bus name grammar keeps the old one).
     const events = new AbortController();
+    const report = (error) => console.error(`sessionbus: ${error?.message || error}`);
     void (async () => {
       for await (const event of ctx.event.subscribe({ signal: events.signal })) {
-        if (event?.type === "session.deleted") void peers.get(event.data?.sessionID)?.dispose();
-        const renamed = event?.type === "session.renamed" ? peers.get(event.data?.sessionID) : undefined;
-        if (renamed && validate("SessionHelloRequest", { protocol: 1, product: "opencode-peer", session_id: event.data.sessionID, groups: [], info: { cwd: ctx.location.directory }, name: event.data.title })) {
-          void renamed.rehello(event.data.title, { cwd: ctx.location.directory }).catch((error) => console.error(`sessionbus: ${error?.message || error}`));
+        const data = event?.data;
+        if (event?.type === "session.created" && peers.has(data?.parentID)) {
+          const parent = peers.get(data.parentID);
+          void attach(data.sessionID, { socket: parent.socket, groups: parent.groups }).catch(report);
+        }
+        if (event?.type === "session.deleted") void peers.get(data?.sessionID)?.peer.dispose();
+        const renamed = event?.type === "session.renamed" ? peers.get(data?.sessionID) : undefined;
+        if (renamed && validate("SessionHelloRequest", { protocol: 1, product: "opencode-peer", session_id: data.sessionID, groups: [], info: { cwd: ctx.location.directory }, name: data.title })) {
+          void renamed.peer.rehello(data.title, { cwd: ctx.location.directory }).catch(report);
         }
       }
-    })().catch((error) => { if (!events.signal.aborted) console.error(`sessionbus: ${error?.message || error}`); });
+    })().catch((error) => { if (!events.signal.aborted) report(error); });
     // Closes only this instance's Peers; a newer instance's hello supersedes.
     return async () => {
       events.abort();
-      await Promise.allSettled([...peers.values()].map((peer) => peer.dispose()));
+      await Promise.allSettled([...peers.values()].map((entry) => entry.peer.dispose()));
     };
   };
 }
 
 export default { id: "sessionbus", setup: createServer() };
 
-function hello(input, session, directory) {
-  const identity = { product: "opencode-peer", session_id: input.sessionID, groups: input.groups, info: { cwd: directory } };
-  const name = input.name || session?.title;
+function hello(sessionID, binding, session, directory) {
+  const identity = { product: "opencode-peer", session_id: sessionID, groups: binding.groups, info: { cwd: directory } };
+  const name = binding.name || session?.title;
   if (name && validate("SessionHelloRequest", { protocol: 1, ...identity, name })) return { ...identity, name };
   if (!validate("SessionHelloRequest", { protocol: 1, ...identity })) throw new Error("invalid Sessionbus identity for this OpenCode session");
   return identity;

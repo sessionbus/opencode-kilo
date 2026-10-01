@@ -100,20 +100,27 @@ test("server: a failed native prompt is an uncertain outcome at the bus, never a
   await cleanup();
 });
 
-test("server: a native Task child acts for its activated ancestor; unrelated sessions do not", async (t) => {
+test("server: a native Task child of an attached session becomes its own peer with the parent's groups", async (t) => {
   const { peers, peer } = fakePeers();
   const ctx = serverContext(t);
-  const parents = { ses_child: "ses_a", ses_grandchild: "ses_child", ses_orphan: undefined };
-  ctx.session.get = async ({ sessionID }) => ({ id: sessionID, title: "native title", parentID: parents[sessionID] });
-  await createServer({ peer })(ctx);
-  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] });
-  assert.deepEqual(await ctx.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_grandchild" }), { content: '{"ok":true}' });
-  assert.deepEqual(peers[0].actions, [["list", {}]]);
-  await assert.rejects(ctx.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_orphan" }), /not active/u);
-  const child = { sessionID: "ses_child", tools: { sessionbus: {} } }, orphan = { sessionID: "ses_orphan", tools: { sessionbus: {} } };
-  await ctx.hooks.context(child); await ctx.hooks.context(orphan);
-  assert.deepEqual(Object.keys(child.tools), ["sessionbus"]); assert.deepEqual(Object.keys(orphan.tools), []);
-  assert.equal(peers.length, 1);
+  ctx.session.get = async ({ sessionID }) => ({ id: sessionID, title: sessionID === "ses_child" ? "child task" : "native title" });
+  const cleanup = await createServer({ peer })(ctx);
+  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"], name: "worker" });
+  ctx.publish({ type: "session.created", data: { sessionID: "ses_unrelated", title: "other" } });
+  ctx.publish({ type: "session.created", data: { sessionID: "ses_child", parentID: "ses_a", title: "child task" } });
+  ctx.publish({ type: "session.created", data: { sessionID: "ses_grandchild", parentID: "ses_child" } });
+  for (let i = 0; i < 10 && peers.length < 3; i++) await flush();
+  assert.deepEqual(peers.map((value) => [value.identity.session_id, value.identity.name, value.identity.groups, value.env.SESSIONBUS_SOCKET]), [
+    ["ses_a", "worker", ["team"], "/bus.sock"],
+    ["ses_child", "child task", ["team"], "/bus.sock"],
+    ["ses_grandchild", "native title", ["team"], "/bus.sock"],
+  ]);
+  // The child's tool acts as the child, not the parent.
+  await ctx.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_child" });
+  assert.deepEqual(peers[1].actions, [["list", {}]]); assert.deepEqual(peers[0].actions, []);
+  await assert.rejects(ctx.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_unrelated" }), /not active/u);
+  await cleanup();
+  assert.ok(peers.every((value) => value.disposed));
 });
 
 test("server: a native rename says hello again under the new title; invalid titles keep the old name", async (t) => {
