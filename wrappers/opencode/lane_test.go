@@ -702,3 +702,24 @@ func TestLaneReleasedDeliverSeenBeforeTerminalIsTrackedAgain(t *testing.T) {
 		t.Fatalf("status = %+v", status)
 	}
 }
+
+// Native can fail before promoting our prompt (for example while preparing the
+// step's agent). After our admission and before our delivery the terminal may
+// also be earlier work's, so the Run is unavailable with the native context; a
+// terminal before our admission is ignored. Worker Close then completes.
+func TestLaneFailureBeforeOurDeliveryEndsTheRunAsUnknown(t *testing.T) {
+	f := newLaneFixture(t, kit.OpenOptions{}, "", nil)
+	own := f.start(t, 1, "task")
+	f.native.emit("session.execution.failed", map[string]any{"sessionID": "ses_lane", "error": map[string]string{"type": "earlier", "message": "not ours"}})
+	f.running(t, 1)
+	f.native.emit("session.inbox.enqueued", map[string]any{"sessionID": "ses_lane", "inboxID": own})
+	f.native.emit("session.execution.started", map[string]any{"sessionID": "ses_lane"})
+	f.native.emit("session.execution.failed", map[string]any{"sessionID": "ses_lane", "error": map[string]string{"type": "AgentNotFoundError", "message": "Agent not found"}})
+	status := f.status(t, "turn.wait", 1)
+	if status.State != "unavailable" || status.Result != nil || !strings.Contains(status.Reason, "AgentNotFoundError") {
+		t.Fatalf("status = %+v", status)
+	}
+	if frame := f.answer(t, f.begin(t, "session.close", kit.SessionCloseRequest{SessionID: "ses_lane@local"})); frame.Error != nil {
+		t.Fatalf("close = %+v", frame.Error)
+	}
+}

@@ -29,8 +29,10 @@ type laneRun struct {
 	released  map[string]bool
 	delivered map[string]int // event position of each input's native delivery
 	terminal  int            // position of the latest succeeded terminal after our delivery
+	admitted  bool           // native announced our own prompt's admission in the stream
 	rejected  bool           // this lane declined a native ask during this Run
 	final     bool
+	early     bool // the terminal came before native delivered our own prompt
 	outcome   string
 	reason    string
 	message   string
@@ -46,7 +48,8 @@ func (r *laneRun) settle(outcome, reason, message string) {
 	if r.final {
 		return
 	}
-	r.final, r.outcome, r.reason, r.message = true, outcome, reason, message
+	_, delivered := r.delivered[r.own]
+	r.final, r.early, r.outcome, r.reason, r.message = true, !delivered, outcome, reason, message
 	close(r.settled)
 }
 
@@ -123,6 +126,9 @@ func (l *Lane) observe(event nativeEvent) {
 	if r != nil && data.SessionID == session && session != "" {
 		switch event.Type {
 		case "session.inbox.enqueued":
+			if data.InboxID == r.own {
+				r.admitted = true
+			}
 			if _, ok := r.prompts[data.InboxID]; ok {
 				r.prompts[data.InboxID] = promptAdmitted
 			} else if r.released[data.InboxID] && !r.final {
@@ -139,8 +145,13 @@ func (l *Lane) observe(event nativeEvent) {
 				r.terminal = at
 				r.evaluate()
 			}
+		// A failed or interrupted terminal after our prompt's admission ends the
+		// busy period our prompt joined, even before native delivered it (native
+		// can fail while preparing the step that would promote it); before our
+		// delivery it may also be earlier work's, so Run reports it as unknown.
+		// A terminal before our admission belongs to earlier work.
 		case "session.execution.failed":
-			if _, ours := r.delivered[r.own]; ours {
+			if r.admitted {
 				var failure struct {
 					Type    string `json:"type"`
 					Message string `json:"message"`
@@ -149,7 +160,7 @@ func (l *Lane) observe(event nativeEvent) {
 				r.settle("failed", failure.Type, failure.Message)
 			}
 		case "session.execution.interrupted":
-			if _, ours := r.delivered[r.own]; ours {
+			if r.admitted {
 				message := ""
 				if r.rejected && data.Reason == "shutdown" {
 					message = "run ended by permission rejection"
@@ -285,8 +296,11 @@ func (l *Lane) Run(ctx context.Context, run *kit.Run, input kit.RunInput) (kit.T
 		return kit.TurnResult{}, context.Cause(life)
 	}
 	l.mu.Lock()
-	outcome, reason, message, unknown := r.outcome, r.reason, r.message, len(r.released)
+	outcome, reason, message, unknown, early := r.outcome, r.reason, r.message, len(r.released), r.early
 	l.mu.Unlock()
+	if early && outcome != "succeeded" {
+		return kit.TurnResult{}, fmt.Errorf("OpenCode execution %s (%s: %s) before delivering this Run's input; the input stays pending in native", outcome, reason, message)
+	}
 	switch outcome {
 	case "failed":
 		return kit.TurnResult{Outcome: "failed", Result: message, NativeStopReason: reason}, nil
