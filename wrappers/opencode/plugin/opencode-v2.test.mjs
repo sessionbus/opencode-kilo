@@ -401,6 +401,22 @@ test("tui: cleanup while a read settles stops that attempt before any update or 
   assert.deepEqual(ctx.calls, []); assert.deepEqual(ctx.toasts, []);
 });
 
+test("tui: a plugin instance re-created in the same TUI does not repeat the launch's create or name", async () => {
+  const { ctx, solid } = tuiContext();
+  const environment = launch({ create: true });
+  const cleanup = await createTui(environment, { solid })(ctx);
+  await flush(); await flush();
+  assert.deepEqual(ctx.calls.map((call) => call[0]), ["create", "navigate", "update", "activate"]);
+  await cleanup();
+  assert.deepEqual(JSON.parse(environment.SESSIONBUS_OPENCODE_LAUNCH), { pid: process.pid, socket: "/bus.sock", name: "", groups: ["team"], create: false });
+  // Native re-creates the plugin (a hot reload) in the same TUI, still showing the
+  // session, which the user may have renamed meanwhile: no create, no -n again.
+  const { ctx: again, solid: againSolid } = tuiContext();
+  await createTui(environment, { solid: againSolid })(again);
+  again.show("ses_new"); await flush(); await flush();
+  assert.deepEqual(again.calls, [["activate", { sessionID: "ses_new", socket: "/bus.sock", groups: ["team"] }, { location: { directory: "/work" } }]]);
+});
+
 test("tui: native unload of its directory and reconnect each trigger one activation; cleanup stops all", async () => {
   const { ctx, solid } = tuiContext();
   const cleanup = await createTui(launch({ name: "" }), { solid })(ctx);

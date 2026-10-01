@@ -20,6 +20,14 @@ export function createTui(environment = process.env, dependencies = {}) {
     if (!launch || launch.pid !== process.pid) return;
     // Native supplies Solid to TUI plugins; imported only once active.
     const { createEffect, createRoot } = dependencies.solid || await import("solid-js");
+    // The launch's one-shot actions (create a session; give the first shown
+    // one the -n name) happen once per TUI process: each is recorded as spent
+    // in this process's launch variable, so a plugin instance native creates
+    // again (a hot reload) only activates what is shown.
+    const spend = (fields) => {
+      launch = { ...launch, ...fields };
+      environment[launchEnv] = JSON.stringify(launch);
+    };
     const sessions = new Map();
     // Shown sessions native has not created yet, with the name still to give.
     const pending = new Map();
@@ -60,6 +68,7 @@ export function createTui(environment = process.env, dependencies = {}) {
         sessions.set(route.sessionID, shown);
         const title = name;
         name = undefined;
+        if (title) spend({ name: "" });
         activate(route.sessionID, title);
       });
       // A launch that selects no session gets one, so it is reachable while it
@@ -70,6 +79,7 @@ export function createTui(environment = process.env, dependencies = {}) {
         const directory = context.location?.directory;
         if (closed || created || !directory) return;
         created = true;
+        spend({ create: false });
         void (async () => {
           const session = await context.client.session.create({ ...(name ? { title: name } : {}), location: { directory } });
           if (!closed) context.ui.router.navigate({ type: "session", sessionID: session.id });
