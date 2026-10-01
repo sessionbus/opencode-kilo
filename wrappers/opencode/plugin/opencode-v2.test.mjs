@@ -339,6 +339,22 @@ test("tui: a session shown before native creates it is activated, named, once na
   assert.equal(ctx.calls.length, 2); assert.equal(ctx.listening("session.created"), false);
 });
 
+test("tui: a reconnect before native creates the shown session keeps its pending name", async () => {
+  const { ctx, solid } = tuiContext();
+  ctx.missing.add("ses_prompt");
+  await createTui(launch(), { solid })(ctx);
+  ctx.show("ses_prompt"); await flush();
+  // not found, reconnect, not found again (that attempt carries no name), then created
+  ctx.emit("server.connected"); await flush(); await flush();
+  assert.deepEqual(ctx.calls, []); assert.deepEqual(ctx.gets, ["ses_prompt", "ses_prompt"]);
+  ctx.missing.delete("ses_prompt");
+  ctx.emit("session.created", { type: "session.created", data: { sessionID: "ses_prompt" } }); await flush(); await flush();
+  assert.deepEqual(ctx.calls, [
+    ["update", { sessionID: "ses_prompt", title: "worker" }],
+    ["activate", { sessionID: "ses_prompt", socket: "/bus.sock", groups: ["team"], name: "worker" }, { location: { directory: "/work" } }],
+  ]);
+});
+
 test("tui: native unload of its directory and reconnect each trigger one activation; cleanup stops all", async () => {
   const { ctx, solid } = tuiContext();
   const cleanup = await createTui(launch({ name: "" }), { solid })(ctx);

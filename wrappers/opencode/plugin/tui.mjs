@@ -35,7 +35,8 @@ export function createTui(environment = process.env, dependencies = {}) {
       })().catch((error) => {
         if (closed) return;
         if (error?._tag === "SessionNotFoundError") {
-          pending.set(sessionID, title);
+          // A later attempt without the name (a reconnect) keeps it.
+          pending.set(sessionID, title ?? pending.get(sessionID));
           return;
         }
         const waits = error?.type === undefined || error.type === "rpc.unavailable";
