@@ -24,6 +24,12 @@ import { OwnedPeer } from "./peer.mjs";
 // rule is kept. Sub-agents get no such rule.
 const grant = { action: "sessionbus", resource: "*", effect: "allow" };
 
+// The daemon accepts only the ASCII space among space separators in a name
+// (Go unicode.IsPrint); the kit schema accepts all of them, and a hello the
+// daemon refuses ends the Peer. Such a title keeps the old bus name, like any
+// other title outside the grammar.
+const daemonName = (name) => typeof name === "string" && !/\p{Zs}/u.test(name.replaceAll(" ", ""));
+
 export function createServer(dependencies = {}) {
   const connect = dependencies.peer || ((identity, deliver, env) => new OwnedPeer(identity, deliver, env));
   return async function setup(ctx) {
@@ -100,7 +106,7 @@ export function createServer(dependencies = {}) {
         const data = event?.data;
         if (event?.type === "session.deleted") void peers.get(data?.sessionID)?.peer.dispose();
         const renamed = event?.type === "session.renamed" ? peers.get(data?.sessionID) : undefined;
-        if (renamed && validate("SessionHelloRequest", { protocol: 1, product: "opencode-peer", session_id: data.sessionID, groups: [], info: { cwd: ctx.location.directory }, name: data.title })) {
+        if (renamed && daemonName(data.title) && validate("SessionHelloRequest", { protocol: 1, product: "opencode-peer", session_id: data.sessionID, groups: [], info: { cwd: ctx.location.directory }, name: data.title })) {
           void renamed.peer.rehello(data.title, { cwd: ctx.location.directory }).catch(report);
         }
       }
@@ -118,7 +124,7 @@ export default { id: "sessionbus", setup: createServer() };
 function hello(sessionID, binding, session, directory) {
   const identity = { product: "opencode-peer", session_id: sessionID, groups: binding.groups, info: { cwd: directory } };
   const name = binding.name || session?.title;
-  if (name && validate("SessionHelloRequest", { protocol: 1, ...identity, name })) return { ...identity, name };
+  if (name && daemonName(name) && validate("SessionHelloRequest", { protocol: 1, ...identity, name })) return { ...identity, name };
   if (!validate("SessionHelloRequest", { protocol: 1, ...identity })) throw new Error("invalid Sessionbus identity for this OpenCode session");
   return identity;
 }

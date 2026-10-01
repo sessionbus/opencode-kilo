@@ -182,9 +182,17 @@ test("server: a native rename says hello again under the new title; invalid titl
   ctx.publish({ type: "session.renamed", data: { sessionID: "ses_other", title: "elsewhere" } });
   ctx.publish({ type: "session.renamed", data: { sessionID: "ses_a", title: "renamed worker" } });
   ctx.publish({ type: "session.renamed", data: { sessionID: "ses_a", title: "x".repeat(300) } });
-  for (let i = 0; i < 5 && !peers[0].renames.length; i++) await flush();
+  // Space separators other than the ASCII space: the daemon refuses them.
+  ctx.publish({ type: "session.renamed", data: { sessionID: "ses_a", title: "x\u3000y" } });
+  ctx.publish({ type: "session.renamed", data: { sessionID: "ses_a", title: "a\u00a0b" } });
+  ctx.publish({ type: "session.renamed", data: { sessionID: "ses_a", title: "名前 🙂 ünï" } });
+  for (let i = 0; i < 10 && peers[0].renames.length < 2; i++) await flush();
   await flush();
-  assert.deepEqual(peers[0].renames, [["renamed worker", { cwd: "/work" }]]);
+  assert.deepEqual(peers[0].renames, [["renamed worker", { cwd: "/work" }], ["名前 🙂 ünï", { cwd: "/work" }]]);
+  // At activation such a name or title leaves the peer unnamed rather than refused.
+  await ctx.handlers.activate({ sessionID: "ses_space", socket: "/bus.sock", groups: ["team"], name: "x\u3000y" });
+  await ctx.handlers.activate({ sessionID: "ses_unicode", socket: "/bus.sock", groups: ["team"], name: "名前" });
+  assert.deepEqual(peers.slice(1).map((value) => [value.identity.session_id, value.identity.name]), [["ses_space", undefined], ["ses_unicode", "名前"]]);
   await cleanup();
 });
 
