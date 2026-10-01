@@ -456,12 +456,12 @@ func (l *Lane) Deliver(ctx context.Context, request kit.DeliveryRequest, run *ki
 	}
 	l.mu.Lock()
 	r := l.active
-	if r == nil || r.run != run || r.final || l.ctx.Err() != nil {
+	if r == nil || r.run != run || r.final || r.cancelled || l.ctx.Err() != nil {
 		l.mu.Unlock()
 		return kit.DeliveryReceipt{}, host.NotRunning()
 	}
 	r.prompts[id] = promptInflight
-	client, path, life := l.client, l.promptPath(), l.ctx
+	client, path, life, session := l.client, l.promptPath(), l.ctx, l.session
 	l.mu.Unlock()
 	combined, cancel := context.WithCancel(ctx)
 	stop := context.AfterFunc(life, cancel)
@@ -469,6 +469,14 @@ func (l *Lane) Deliver(ctx context.Context, request kit.DeliveryRequest, run *ki
 	stop()
 	cancel()
 	admitted := l.resolve(r, id, err)
+	// Submitted before its Run was cancelled: whatever the answer, native may
+	// hold it, so it is withdrawn like the Run's other undelivered steers.
+	l.mu.Lock()
+	cancelled := r.cancelled
+	l.mu.Unlock()
+	if cancelled && l.withdraw(client, session, id) != nil {
+		return kit.DeliveryReceipt{}, &kit.ProtocolError{Code: protocol.Internal, Message: "internal", Data: json.RawMessage(`"OpenCode input not withdrawn after its Run was cancelled; it may run with the next task"`)}
+	}
 	var refused *nativeStatus
 	switch {
 	case admitted:
@@ -482,17 +490,35 @@ func (l *Lane) Deliver(ctx context.Context, request kit.DeliveryRequest, run *ki
 
 func (l *Lane) promptPath() string { return "/api/session/" + url.PathEscape(l.session) + "/prompt" }
 
-// Interrupt asks native to interrupt the active Run's execution. Admitted
-// inputs that native has not delivered stay in its inbox for the next wake.
+// Interrupt asks native to interrupt the active Run's execution and marks the
+// Run cancelled: it takes no further input, and before it ends it withdraws
+// the steers native has not delivered (Run).
 func (l *Lane) Interrupt(ctx context.Context, run *kit.Run) error {
 	l.mu.Lock()
 	r, client, session := l.active, l.client, l.session
-	l.mu.Unlock()
 	if r == nil || r.run != run {
+		l.mu.Unlock()
 		return nil
 	}
+	r.cancelled = true
+	l.mu.Unlock()
 	var answer struct {
 		Interrupted bool `json:"interrupted"`
 	}
-	return client.call(ctx, "POST", "/api/session/"+url.PathEscape(session)+"/interrupt?resume=false", struct{}{}, &answer)
+	err := client.call(ctx, "POST", "/api/session/"+url.PathEscape(session)+"/interrupt?resume=false", struct{}{}, &answer)
+	if err != nil {
+		l.mu.Lock()
+		r.cancelled = false
+		l.mu.Unlock()
+	}
+	return err
+}
+
+// withdraw cancels one inbox input; native answers an already delivered or
+// unknown item as a no-op.
+func (l *Lane) withdraw(client *nativeClient, session, id string) error {
+	l.mu.Lock()
+	life := l.ctx
+	l.mu.Unlock()
+	return client.call(life, "DELETE", "/api/session/"+url.PathEscape(session)+"/inbox/"+url.PathEscape(id), nil, nil)
 }
