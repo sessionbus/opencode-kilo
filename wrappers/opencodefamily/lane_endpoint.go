@@ -78,10 +78,24 @@ func (e *laneEndpoint) serve() {
 		go func() {
 			defer e.workers.Done()
 			defer func() { c.Close(); e.mu.Lock(); delete(e.clients, c); e.mu.Unlock() }()
-			_ = mcp.ServeSessionbus(o, c, c, mcp.ReportHandler{})
+			_ = mcp.ServeSessionbus(o, c, c, e.report())
 		}()
 	}
 }
+
+// laneInputHost is an owner that steers its active Run through the plugin's
+// model-call hook (lane_input.go).
+type laneInputHost interface {
+	LaneInput(json.RawMessage) (<-chan error, error)
+}
+
+func (e *laneEndpoint) report() mcp.ReportHandler {
+	if host, ok := e.host.(laneInputHost); ok {
+		return mcp.ReportHandler{Name: laneInputTool, Begin: host.LaneInput}
+	}
+	return mcp.ReportHandler{}
+}
+
 func (o *laneToolOwner) Initialized() {
 	e := o.endpoint
 	e.mu.Lock()

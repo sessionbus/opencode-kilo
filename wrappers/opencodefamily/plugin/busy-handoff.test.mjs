@@ -2,6 +2,7 @@
 import { nativeProduct } from "./profile.mjs";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
+import net from "node:net";
 import test from "node:test";
 import { NativeDelivery, nextPartID } from "./delivery.mjs";
 import { createServer } from "./server.mjs";
@@ -113,13 +114,61 @@ async function interactive(t, nativeInput) {
 }
 const user = (id, parts = [{ id: "prt_000000000001ABCDEFGHIJKLMN", sessionID: "ses_s", messageID: id, type: "text", text: "task" }]) => ({ info: { id, sessionID: "ses_s", role: "user" }, parts });
 
-test("lane servers keep released behaviour: no busy handoff hooks", async () => {
-  const hooks = await createServer({ SESSIONBUS_LANE_SOCKET: "/nonexistent/lane.sock" })();
-  try {
-    assert.equal(hooks["experimental.chat.messages.transform"], undefined);
-    assert.equal(hooks["chat.message"], undefined);
-    assert.equal(hooks.event, undefined);
-  } finally { await hooks.dispose(); }
+// Minimal Go-lane-shaped MCP endpoint: `input` answers the hidden hook tool
+// with undefined (written) or an error string.
+async function lane(t, input) {
+  const directory = await mkdtemp("/tmp/sb-lane-");
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const sockets = new Set();
+  const server = net.createServer((socket) => {
+    sockets.add(socket);
+    let buffer = "";
+    socket.on("data", (chunk) => {
+      buffer += chunk;
+      for (let end; (end = buffer.indexOf("\n")) >= 0;) {
+        const request = JSON.parse(buffer.slice(0, end));
+        buffer = buffer.slice(end + 1);
+        if (request.id === undefined) continue;
+        const reply = (result) => socket.write(JSON.stringify({ jsonrpc: "2.0", id: request.id, result }) + "\n");
+        if (request.method === "initialize") reply({ protocolVersion: "2024-11-05", capabilities: { tools: {} } });
+        else if (request.method === "tools/list") reply({ tools: [{ name: "sessionbus" }] });
+        else void Promise.resolve(request.params.name === "sessionbus_native_input" ? input(request.params.arguments) : undefined)
+          .then((error) => reply({ ...(error ? { isError: true } : {}), content: [{ type: "text", text: JSON.stringify(error ? { error } : {}) }] }));
+      }
+    });
+  });
+  await new Promise((resolve) => server.listen(directory + "/lane.sock", resolve));
+  t.after(() => new Promise((resolve) => { server.close(resolve); for (const socket of sockets) socket.destroy(); }));
+  const written = [], reads = [];
+  const client = { session: { message: async ({ path }) => { reads.push(path); return { data: { parts: written.filter((part) => part.messageID === path.messageID) } }; } } };
+  const hooks = await createServer({ SESSIONBUS_LANE_SOCKET: directory + "/lane.sock" })({ client });
+  t.after(() => hooks.dispose());
+  await hooks.tool.sessionbus.execute({ action: "list", arguments: {} }, { sessionID: "ses_s", messageID: "msg_tool", abort: new AbortController().signal });
+  return { hooks, written, reads };
+}
+
+test("lane transform: the Go owner writes queued input as the requested part; the hook adds it to this call", { timeout: 5000 }, async (t) => {
+  const requests = [];
+  let answer = "no queued input";
+  const f = await lane(t, (args) => {
+    requests.push(args);
+    if (answer) return answer;
+    f.written.push({ id: args.part_id, sessionID: args.session_id, messageID: args.message_id, type: "text", text: "queued" });
+  });
+  await f.hooks["chat.message"]({ sessionID: "ses_s" }, { message: { id: "msg_new", sessionID: "ses_s", role: "user" }, parts: [] });
+  const current = user("msg_new");
+  // Empty FIFO: nothing is read back or added.
+  await f.hooks["experimental.chat.messages.transform"]({}, { messages: [current] });
+  assert.equal(requests.length, 1); assert.equal(f.reads.length, 0); assert.equal(current.parts.length, 1);
+  assert.equal(requests[0].session_id, "ses_s"); assert.equal(requests[0].message_id, "msg_new");
+  assert.ok(requests[0].part_id > "prt_000000000001ABCDEFGHIJKLMN");
+  answer = undefined;
+  await f.hooks["experimental.chat.messages.transform"]({}, { messages: [current] });
+  assert.equal(current.parts.length, 2); assert.equal(current.parts[1].text, "queued"); assert.equal(current.parts[1].id, requests[1].part_id);
+  // An owner failure never reaches native.
+  answer = "native write failed";
+  await f.hooks["experimental.chat.messages.transform"]({}, { messages: [current] });
+  assert.equal(requests.length, 3); assert.equal(current.parts.length, 2);
 });
 
 test("transform appends handed-off input to the newest prompt only and never throws into native", { timeout: 5000 }, async (t) => {

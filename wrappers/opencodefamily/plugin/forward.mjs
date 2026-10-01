@@ -113,6 +113,18 @@ export class SessionbusForwarder {
     }
   }
 
+  // Lane counterpart of nativeInput: the Go lane owner's hidden hook tool
+  // writes queued input as the requested native part and replies once written.
+  async laneInput(parameters, signal) {
+    if (this.#operations >= bridgeLimits.work) throw new Error("Sessionbus forwarder work limit reached");
+    this.#operations++;
+    try {
+      await this.ready(signal);
+      const result = await this.#request("tools/call", { name: "sessionbus_native_input", arguments: parameters }, signal);
+      if (result?.isError) throw new ForwardedToolError(JSON.parse(result.content?.[0]?.text ?? "{}"));
+    } finally { this.#operations--; }
+  }
+
   async nativeInput(parameters, signal) {
     if (this.#operations >= bridgeLimits.work) throw new Error("Sessionbus forwarder work limit reached");
     this.#operations++;
