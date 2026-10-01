@@ -230,8 +230,14 @@ function tuiContext() {
     location: { directory: "/work" },
     calls, toasts,
     fail: undefined,
+    missing: new Set(), gets: [],
     client: {
       session: {
+        get: async ({ sessionID }) => {
+          ctx.gets.push(sessionID);
+          if (ctx.missing.has(sessionID)) throw { _tag: "SessionNotFoundError", sessionID, message: `Session not found: ${sessionID}` };
+          return { id: sessionID };
+        },
         update: async (input) => { calls.push(["update", input]); },
         create: async (input) => { calls.push(["create", input]); return { id: "ses_new", location: input.location }; },
       },
@@ -307,6 +313,30 @@ test("tui: launch-and-wait creates once, when native's location becomes availabl
   await cleanup();
   early.locate({ directory: "/work" }); await flush();
   assert.deepEqual(early.calls, []);
+});
+
+test("tui: a session shown before native creates it is activated, named, once native announces it", async () => {
+  const { ctx, solid } = tuiContext();
+  ctx.missing.add("ses_prompt");
+  const cleanup = await createTui(launch(), { solid })(ctx);
+  ctx.show("ses_prompt"); await flush(); await flush();
+  assert.deepEqual(ctx.calls, []); assert.deepEqual(ctx.toasts, []);
+  ctx.emit("session.created", { type: "session.created", data: { sessionID: "ses_other" } }); await flush();
+  assert.deepEqual(ctx.calls, []);
+  ctx.missing.delete("ses_prompt");
+  ctx.emit("session.created", { type: "session.created", data: { sessionID: "ses_prompt" } }); await flush(); await flush();
+  ctx.emit("session.created", { type: "session.created", data: { sessionID: "ses_prompt" } }); await flush();
+  assert.deepEqual(ctx.calls, [
+    ["update", { sessionID: "ses_prompt", title: "worker" }],
+    ["activate", { sessionID: "ses_prompt", socket: "/bus.sock", groups: ["team"], name: "worker" }, { location: { directory: "/work" } }],
+  ]);
+  assert.deepEqual(ctx.gets, ["ses_prompt", "ses_prompt"]);
+  // After cleanup a later announcement activates nothing.
+  ctx.missing.add("ses_late"); ctx.show("ses_late"); await flush();
+  await cleanup();
+  ctx.missing.delete("ses_late");
+  ctx.emit("session.created", { type: "session.created", data: { sessionID: "ses_late" } }); await flush();
+  assert.equal(ctx.calls.length, 2); assert.equal(ctx.listening("session.created"), false);
 });
 
 test("tui: native unload of its directory and reconnect each trigger one activation; cleanup stops all", async () => {
