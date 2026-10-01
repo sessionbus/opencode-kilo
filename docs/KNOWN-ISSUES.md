@@ -77,7 +77,7 @@ A second `kilo-peer` launch takes over the same Sessionbus identity.
 After SIGKILL of a lane worker, its lane tool socket under
 `$XDG_RUNTIME_DIR/sessionbus/lanes/` remains.
 - **Why:**
-  - only the worker's own Close removes it;
+  - the worker's own cleanup runs in Close, which SIGKILL skips;
   - every lane start uses a new random name, so a resume never reuses or clears the old one;
   - resume, close and forget did not remove it.
 - **Clearing:** it was observed cleared at the next daemon start. The daemon's sweep of sockets it cannot connect to runs at its startup, before its presence listener.
