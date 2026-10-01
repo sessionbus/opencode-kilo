@@ -106,69 +106,40 @@ test("server: a failed native prompt is an uncertain outcome at the bus, never a
   await cleanup();
 });
 
-test("server: a native Task child of an attached session becomes its own peer at creation with the parent's groups", async (t) => {
+test("server: native sub-agents speak as the activated session they descend from, never as peers of their own", async (t) => {
   const { peers, peer } = fakePeers();
   const ctx = serverContext(t);
-  ctx.session.get = async ({ sessionID }) => ({ id: sessionID, title: sessionID === "ses_child" ? "child task" : "native title", parentID: { ses_child: "ses_a", ses_grandchild: "ses_child" }[sessionID] });
-  const cleanup = await createServer({ peer })(ctx);
-  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"], name: "worker" });
-  ctx.publish({ type: "session.created", data: { sessionID: "ses_unrelated", title: "other" } });
-  ctx.publish({ type: "session.created", data: { sessionID: "ses_child", parentID: "ses_a", title: "child task" } });
-  ctx.publish({ type: "session.created", data: { sessionID: "ses_grandchild", parentID: "ses_child" } });
-  for (let i = 0; i < 10 && peers.length < 3; i++) await flush();
-  assert.deepEqual(peers.map((value) => [value.identity.session_id, value.identity.name, value.identity.groups, value.env.SESSIONBUS_SOCKET]), [
-    ["ses_a", "worker", ["team"], "/bus.sock"],
-    ["ses_child", "child task", ["team"], "/bus.sock"],
-    ["ses_grandchild", "native title", ["team"], "/bus.sock"],
-  ]);
-  // The child's tool acts as the child, not the parent.
-  await ctx.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_child" });
-  assert.deepEqual(peers[1].actions, [["list", {}]]); assert.deepEqual(peers[0].actions, []);
-  await assert.rejects(ctx.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_unrelated" }), /not active/u);
-  // Its first model request keeps the tool and does not attach it again.
-  const first = { sessionID: "ses_child", tools: { sessionbus: {} } };
-  await ctx.hooks.context(first);
-  assert.deepEqual(Object.keys(first.tools), ["sessionbus"]); assert.equal(peers.length, 3);
-  await cleanup();
-  assert.ok(peers.every((value) => value.disposed));
-});
-
-test("server: a Task child with no session.created (native reuse) attaches at its model request as its own peer", async (t) => {
-  const { peers, peer } = fakePeers();
-  const ctx = serverContext(t);
-  const parents = { ses_child: "ses_a", ses_grandchild: "ses_child", ses_stray: "ses_not_attached" };
-  const titles = { ses_child: "child task" };
+  const parents = { ses_child: "ses_a", ses_grandchild: "ses_child", ses_stray: "ses_other", ses_loop1: "ses_loop2", ses_loop2: "ses_loop1" };
   let lookups = 0;
-  ctx.session.get = async ({ sessionID }) => { lookups++; return { id: sessionID, title: titles[sessionID] || "native title", parentID: parents[sessionID] }; };
+  ctx.session.get = async ({ sessionID }) => { lookups++; return { id: sessionID, title: "native title", parentID: parents[sessionID] }; };
   const cleanup = await createServer({ peer })(ctx);
-  // No attached session: unrelated requests cost no lookup and lose the tool.
-  const early = { sessionID: "ses_unrelated", tools: { sessionbus: {} } };
+  // Nothing attached: no native reads, the tool is hidden.
+  const early = { sessionID: "ses_child", tools: { sessionbus: {} } };
   await ctx.hooks.context(early);
   assert.equal(lookups, 0); assert.deepEqual(Object.keys(early.tools), []);
   await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"], name: "worker" });
-  // An existing child native continues: no session.created reaches the plugin.
-  const child = { sessionID: "ses_child", tools: { sessionbus: {} } };
-  await ctx.hooks.context(child);
-  const grandchild = { sessionID: "ses_grandchild", tools: { sessionbus: {} } };
-  await ctx.hooks.context(grandchild);
-  const unrelated = { sessionID: "ses_unrelated", tools: { sessionbus: {} } };
-  await ctx.hooks.context(unrelated);
-  // A child of a session that is not attached is never adopted.
-  const stray = { sessionID: "ses_stray", tools: { sessionbus: {} } };
-  await ctx.hooks.context(stray);
-  assert.deepEqual(Object.keys(child.tools), ["sessionbus"]); assert.deepEqual(Object.keys(grandchild.tools), ["sessionbus"]);
-  assert.deepEqual(Object.keys(unrelated.tools), []); assert.deepEqual(Object.keys(stray.tools), []);
-  assert.deepEqual(peers.map((value) => [value.identity.session_id, value.identity.name, value.identity.groups, value.env.SESSIONBUS_SOCKET]), [
-    ["ses_a", "worker", ["team"], "/bus.sock"],
-    ["ses_child", "child task", ["team"], "/bus.sock"],
-    ["ses_grandchild", "native title", ["team"], "/bus.sock"],
-  ]);
-  // The child's tool acts as the child; a second request does not attach again.
-  await ctx.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_child" });
-  assert.deepEqual(peers[1].actions, [["list", {}]]); assert.deepEqual(peers[0].actions, []);
-  await ctx.hooks.context({ sessionID: "ses_child", tools: { sessionbus: {} } });
-  assert.equal(peers.length, 3);
-  // A failing lookup never throws into native; the tool is removed for that request.
+  lookups = 0;
+  // Native creation of a child attaches nothing.
+  ctx.publish({ type: "session.created", data: { sessionID: "ses_child", parentID: "ses_a" } });
+  await flush(); await flush();
+  assert.equal(peers.length, 1);
+  // Children and grandchildren of the activated session see the tool; others do not.
+  const visible = {};
+  for (const sessionID of ["ses_a", "ses_child", "ses_grandchild", "ses_stray", "ses_unrelated", "ses_loop1"]) {
+    const request = { sessionID, tools: { sessionbus: {} } };
+    await ctx.hooks.context(request);
+    visible[sessionID] = Object.keys(request.tools).length === 1;
+  }
+  assert.deepEqual(visible, { ses_a: true, ses_child: true, ses_grandchild: true, ses_stray: false, ses_unrelated: false, ses_loop1: false });
+  // A sub-agent's call goes through the activated session's Peer: its source and self_info.
+  await ctx.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_grandchild" });
+  assert.deepEqual(peers[0].actions, [["list", {}]]);
+  await assert.rejects(ctx.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_stray" }), /not active/u);
+  // A managed TUI showing a sub-agent attaches and grants nothing (owner, 2026-10-01).
+  await ctx.handlers.activate({ sessionID: "ses_child", socket: "/bus.sock", groups: ["team"] });
+  assert.equal(peers.length, 1);
+  assert.deepEqual(ctx.updates.map((update) => update.sessionID), ["ses_a"]);
+  // A failing native read never throws into native; the tool is hidden.
   ctx.session.get = async () => { throw new Error("lookup failed"); };
   const failing = { sessionID: "ses_other_child", tools: { sessionbus: {} } };
   await ctx.hooks.context(failing);
@@ -177,15 +148,14 @@ test("server: a Task child with no session.created (native reuse) attaches at it
   assert.ok(peers.every((value) => value.disposed));
 });
 
-test("server: an activated session keeps the Sessionbus tool through one last allow rule; sub-agents get none", async (t) => {
+test("server: an activated session keeps the Sessionbus tool through one last allow rule", async (t) => {
   const { peers, peer } = fakePeers();
   const ctx = serverContext(t);
   const grant = { action: "sessionbus", resource: "*", effect: "allow" };
   const deny = { action: "sessionbus", resource: "*", effect: "deny" };
   const ask = { action: "shell", resource: "*", effect: "ask" };
-  const rules = { ses_deny: [deny, ask], ses_granted: [ask, grant], ses_buried: [grant, deny], ses_child: [deny], ses_reused: [deny] };
-  const parents = { ses_child: "ses_deny", ses_reused: "ses_deny" };
-  ctx.session.get = async ({ sessionID }) => ({ id: sessionID, title: "native title", parentID: parents[sessionID], permissions: rules[sessionID] });
+  const rules = { ses_deny: [deny, ask], ses_granted: [ask, grant], ses_buried: [grant, deny] };
+  ctx.session.get = async ({ sessionID }) => ({ id: sessionID, title: "native title", permissions: rules[sessionID] });
   const cleanup = await createServer({ peer })(ctx);
   for (const sessionID of ["ses_deny", "ses_granted", "ses_buried", "ses_none"]) await ctx.handlers.activate({ sessionID, socket: "/bus.sock", groups: ["team"] });
   assert.deepEqual(ctx.updates, [
@@ -193,22 +163,14 @@ test("server: an activated session keeps the Sessionbus tool through one last al
     { sessionID: "ses_buried", permissions: [grant, deny, grant] },
     { sessionID: "ses_none", permissions: [grant] },
   ]);
-  // Native sub-agents are attached best effort, without a rule of their own.
-  ctx.publish({ type: "session.created", data: { sessionID: "ses_child", parentID: "ses_deny" } });
-  for (let i = 0; i < 10 && peers.length < 5; i++) await flush();
-  await ctx.hooks.context({ sessionID: "ses_reused", tools: { sessionbus: {} } });
-  assert.deepEqual(peers.map((value) => value.identity.session_id), ["ses_deny", "ses_granted", "ses_buried", "ses_none", "ses_child", "ses_reused"]);
-  assert.equal(ctx.updates.length, 3);
-  // A managed TUI showing a sub-agent attached best effort grants it, keeping its Peer.
-  await ctx.handlers.activate({ sessionID: "ses_child", socket: "/bus.sock", groups: ["team"] });
-  assert.deepEqual(ctx.updates.at(-1), { sessionID: "ses_child", permissions: [deny, grant] });
-  assert.equal(peers.length, 6);
+  assert.equal(peers.length, 4);
   // An activation that cannot be granted is not attached: no Peer without its
   // tool, and an existing Peer is left as it is.
   ctx.session.update = async () => { throw new Error("update failed"); };
   await assert.rejects(ctx.handlers.activate({ sessionID: "ses_failed", socket: "/bus.sock", groups: ["team"] }), /update failed/u);
-  await assert.rejects(ctx.handlers.activate({ sessionID: "ses_reused", socket: "/bus.sock", groups: ["team"] }), /update failed/u);
-  assert.equal(peers.length, 6); assert.ok(peers.every((value) => !value.disposed));
+  rules.ses_deny = [deny, ask];
+  await assert.rejects(ctx.handlers.activate({ sessionID: "ses_deny", socket: "/bus.sock", groups: ["team"] }), /update failed/u);
+  assert.equal(peers.length, 4); assert.ok(peers.every((value) => !value.disposed));
   await cleanup();
 });
 
