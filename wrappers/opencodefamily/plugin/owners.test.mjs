@@ -622,3 +622,17 @@ test("Kilo a non-abort error or another session's abort leaves the idle wake as 
   assert.equal((await f.wires.get("ses_target").call("message.deliver", inbound("wake"))).disposition, "written");
   assert.equal(submissions, 1);
 });
+
+test("a superseded owner stays displaced across a native session update: no second hello", { timeout: 5000 }, async (t) => {
+  let hellos = 0;
+  const f = await fixture(t, { hello: async (connection, request) => { hellos++; await connection.result(request, {}); } });
+  await f.action("ses_target");
+  const wire = f.wires.get("ses_target");
+  await wire.call("session.superseded", {}).catch(() => {});
+  wire.stream.end();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  f.events.emit("session.updated", { properties: { info: info("ses_target", "renamed") } });
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  await assert.rejects(f.action("ses_target"), /superseded/);
+  assert.equal(hellos, 1);
+});
