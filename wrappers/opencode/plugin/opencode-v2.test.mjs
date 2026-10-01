@@ -230,7 +230,7 @@ function tuiContext() {
     location: { directory: "/work" },
     calls, toasts,
     fail: undefined,
-    missing: new Set(), gets: [], holdOnce: new Set(), held: [],
+    missing: new Set(), gets: [], holdOnce: new Set(), held: [], holdFound: new Set(),
     client: {
       session: {
         get: async ({ sessionID }) => {
@@ -238,6 +238,8 @@ function tuiContext() {
           const notFound = { _tag: "SessionNotFoundError", sessionID, message: `Session not found: ${sessionID}` };
           // A read whose 404 is still settling when native announces the session.
           if (ctx.holdOnce.delete(sessionID)) return new Promise((_resolve, reject) => ctx.held.push(() => reject(notFound)));
+          // A successful read still settling when the TUI closes.
+          if (ctx.holdFound.delete(sessionID)) return new Promise((resolve) => ctx.held.push(() => resolve({ id: sessionID })));
           if (ctx.missing.has(sessionID)) throw notFound;
           return { id: sessionID };
         },
@@ -377,6 +379,18 @@ test("tui: native's session.created while the earlier read settles still activat
   // The late 404 left nothing pending: a duplicate announcement starts nothing.
   ctx.emit("session.created", { type: "session.created", data: { sessionID: "ses_prompt" } }); await flush(); await flush();
   assert.deepEqual(ctx.calls, activated); assert.equal(ctx.gets.length, 2);
+});
+
+test("tui: cleanup while a read settles stops that attempt before any update or activation", async () => {
+  const { ctx, solid } = tuiContext();
+  ctx.holdFound.add("ses_a");
+  const cleanup = await createTui(launch(), { solid })(ctx);
+  ctx.show("ses_a"); await flush();
+  assert.equal(ctx.held.length, 1);
+  await cleanup();
+  for (const release of ctx.held) release();
+  await flush(); await flush();
+  assert.deepEqual(ctx.calls, []); assert.deepEqual(ctx.toasts, []);
 });
 
 test("tui: native unload of its directory and reconnect each trigger one activation; cleanup stops all", async () => {

@@ -34,6 +34,7 @@ export function createTui(environment = process.env, dependencies = {}) {
       pending.set(sessionID, title);
       void (async () => {
         await context.client.session.get({ sessionID });
+        if (closed) return;
         pending.delete(sessionID);
         if (title) await context.client.session.update({ sessionID, title });
         if (closed) return;
