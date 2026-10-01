@@ -81,7 +81,7 @@ After SIGKILL of a lane worker, its lane tool socket under
   - every lane start uses a new random name, so a resume never reuses or clears the old one;
   - resume, close and forget did not remove it.
 - **Clearing:** it was observed cleared at the next daemon start. The daemon's sweep of sockets it cannot connect to runs at its startup, before its presence listener.
-- **Effect:** the file is a socket with no listener, readable only by the user. No later lane collides with it.
+- **Effect:** the file is a socket with no listener and mode `0600`. No later lane collides with it.
 - **Not changed here:** the proper owner of this cleanup is the daemon's lane finish, which is core.
 
 Evidence: RESULTS-S5-LANES.md (A2 and its precision), RESULTS-LANES-KILO.md (A2 RCA), LANE-SOCKET-NOTE-1.md.
