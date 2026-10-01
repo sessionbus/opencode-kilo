@@ -44,7 +44,11 @@ repository.
     - a steer request answering after the Run returned;
     - an interrupt with no native terminal;
     - a lane closed before the terminal.
-- **Kilo interactive:** the user cancels while a message is pending. The wrapper's idle wake then submits that message as a new turn, which the model runs. This happened 77 ms after Esc Esc and 115 ms after Reject at a permission prompt. Evidence: RESULTS-I1-KILO.md (I1.4w LC), RESULTS-S4-KILO.md (A7b).
+- **Kilo interactive:**
+  - Up to f5cce3a, when the user cancelled while a message was pending, the wrapper's idle wake submitted that message as a new turn, which the model ran. This happened 77 ms after Esc Esc and 115 ms after Reject at a permission prompt. Evidence: RESULTS-I1-KILO.md (I1.4w LC), RESULTS-S4-KILO.md (A7b).
+  - Since 2dcb0dc, after a native abort (Esc Esc) the waiting message is held until native starts work on the session again. Live, no turn started in the 60 s after Esc Esc, and the user's next prompt received the message inside its task; there the model declined to run its command. An idle wake of a session that was not aborted still replies. Evidence: RESULTS-KILO-WAKE-ABORT.md.
+  - Native names no initiator, so an abort from another cause holds the same way, and native resuming an already admitted prompt releases the hold.
+  - **Not changed:** after Reject at a permission prompt, a different native path with no abort signal, the idle wake is expected to submit as before (not rerun).
 
 ## 3. Displaced interactive Kilo session: its tool call hangs
 

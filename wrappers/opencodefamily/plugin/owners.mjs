@@ -62,12 +62,22 @@ export class NativeOwners {
       }
       record.status = status;
       record.statusRevision++;
+      if (status === "busy") record.aborted = false;
       // Only an idle observed after the assistant's completion follows the
       // native Runner's removal; the halt's earlier idle does not settle it.
       if (status === "idle" && nativeProduct.terminalHandoff) record.settled = record.completed;
       if (status === "idle" && record.delivery) this.#background(record.delivery.idle());
     }));
     if (nativeProduct.blockers) {
+      // A native abort (session.error MessageAbortedError, published before the
+      // idle status) holds idle submission until native starts work on this
+      // session again (busy); the busy handoff then carries the waiting input
+      // into that work. Native names no initiator, so any abort holds, not
+      // only the user's.
+      this.#unsub.push(api.event.on("session.error", (event) => {
+        const record = this.#owners.get(event.properties?.sessionID);
+        if (record && event.properties.error?.name === "MessageAbortedError") record.aborted = true;
+      }));
       for (const type of ["permission.asked", "permission.replied", "question.asked", "question.replied", "question.rejected"]) {
         this.#unsub.push(api.event.on(type, (event) => {
           const record = this.#owners.get(event.properties.sessionID);
@@ -153,7 +163,7 @@ export class NativeOwners {
 
   #unblocked(record) {
     this.#check(record);
-    if (record.checkedBlockers !== record.blockerEpoch || record.status !== "idle") return false;
+    if (record.aborted || record.checkedBlockers !== record.blockerEpoch || record.status !== "idle") return false;
     // Native reactive maps are only a live recheck, never authoritative initial
     // snapshots. Two token references per owner bound invalidation state.
     for (const type of ["permission", "question"]) {
