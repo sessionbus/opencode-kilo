@@ -75,7 +75,7 @@ func run(ctx context.Context, arguments []string) error {
 	if err != nil {
 		return err
 	}
-	product := opencode.New(os.Getenv(host.SocketEnv), host.LaunchTokenDigest(os.Getenv(host.TokenEnv)), executable)
+	product := opencode.NewServiceLane(os.Getenv(host.SocketEnv), executable)
 	worker := sessionkit.NewWorker(product)
 	product.SetShutdown(worker.Shutdown)
 	product.SetCaller(worker.Caller())

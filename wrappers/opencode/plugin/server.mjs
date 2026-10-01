@@ -3,6 +3,7 @@ import { ProtocolError, validate } from "@sessionbus/kit";
 import declaration from "./sessionbus-tool.json" with { type: "json" };
 import { contract } from "./contract.mjs";
 import { renderDelivery } from "./delivery.mjs";
+import { SessionbusForwarder } from "./forward.mjs";
 import { OwnedPeer } from "./peer.mjs";
 
 // Sessionbus attachment for OpenCode v2 sessions a managed TUI activated. The
@@ -16,6 +17,13 @@ import { OwnedPeer } from "./peer.mjs";
 // 2026-10-01): where native lets one use the tool, it acts as the activated
 // session it descends from, best effort. A helper that needs its own identity
 // and guaranteed communications is a lane.
+//
+// A Sessionbus lane worker drives its session through this shared service and
+// binds the session's tool to the worker's own private endpoint: the lane
+// speaks as the worker's bus identity, so no Peer is created here. One holder
+// per session, the first keeps it: a managed TUI cannot activate a lane's
+// session, nor a lane bind a session a TUI activated. The binding lives as long
+// as the worker's connection.
 //
 // A session a managed TUI activated always keeps the Sessionbus tool (owner,
 // 2026-09-19: no communications opt-out): one session permission rule allows
@@ -32,13 +40,18 @@ const daemonName = (name) => typeof name === "string" && !/\p{Zs}/u.test(name.re
 
 export function createServer(dependencies = {}) {
   const connect = dependencies.peer || ((identity, deliver, env) => new OwnedPeer(identity, deliver, env));
+  const forwarder = dependencies.forwarder || ((socket, lifetime) => new SessionbusForwarder(socket, lifetime));
   // How long activation waits for the bus to admit the session: a few of the
   // kit's 2 s reconnect intervals. The Peer keeps reconnecting after that.
   const admissionWait = dependencies.admissionWait ?? 10_000;
   return async function setup(ctx) {
-    // sessionID -> { peer } for this instance only.
+    // sessionID -> { peer } (activated by a managed TUI) or { lane, forward }
+    // (bound by a lane worker), for this instance only.
     const peers = new Map();
+    const lifetime = new AbortController();
     const report = (error) => console.error(`sessionbus: ${error?.message || error}`);
+    const release = (entry) => (entry.forward ?? entry.peer).dispose();
+    const conflict = (context, entry) => context.error("sessionbus.conflict", entry.forward ? "a Sessionbus lane holds this session" : "a managed OpenCode TUI holds this session on Sessionbus", {});
     // The activated session a sub-agent descends from, by native ancestry;
     // nothing is read while no session is attached.
     const owner = async (sessionID) => {
@@ -79,6 +92,7 @@ export function createServer(dependencies = {}) {
     };
     await ctx.rpc.register(contract, {
       activate: async (input, context) => {
+        if (peers.get(input.sessionID)?.forward) return conflict(context, peers.get(input.sessionID));
         // Idempotent: the TUI activates again after reconnects and unloads.
         await attach(input.sessionID, input);
         // Activation reports success only once the bus has admitted the
@@ -87,6 +101,7 @@ export function createServer(dependencies = {}) {
         // connecting. A refused Peer reports its refusal; a cancelled RPC ends
         // only this wait.
         const entry = peers.get(input.sessionID);
+        if (entry?.forward) return conflict(context, entry);
         if (entry) {
           try {
             await entry.peer.ready(AbortSignal.any([context.signal, AbortSignal.timeout(admissionWait)]));
@@ -94,6 +109,30 @@ export function createServer(dependencies = {}) {
             if (error?.name === "TimeoutError") return context.error("sessionbus.not_admitted", "the bus has not admitted this session yet; still connecting", {});
             throw error;
           }
+        }
+        return {};
+      },
+      lane: async ({ sessionID, socket }, context) => {
+        const held = peers.get(sessionID);
+        // Idempotent for the same live binding: the worker binds before every Run.
+        if (held?.lane === socket) return held.forward.ready(context.signal).then(() => ({}));
+        if (held) return conflict(context, held);
+        if (!socket.startsWith("/")) throw new Error("Sessionbus lane endpoint must be an absolute path");
+        const session = await ctx.session.get({ sessionID });
+        if (session?.parentID) throw new Error("a native sub-agent session is not a Sessionbus lane");
+        // Native does not serialize handlers: another holder may have won during the read.
+        if (peers.has(sessionID)) return conflict(context, peers.get(sessionID));
+        const entry = { lane: socket, forward: forwarder(socket, lifetime.signal) };
+        peers.set(sessionID, entry);
+        // Only this binding's end releases the session; a later holder stays.
+        void entry.forward.closed.then(() => {
+          if (peers.get(sessionID) === entry) peers.delete(sessionID);
+        });
+        try {
+          await entry.forward.ready(AbortSignal.any([context.signal, AbortSignal.timeout(admissionWait)]));
+        } catch (error) {
+          void entry.forward.dispose();
+          throw error;
         }
         return {};
       },
@@ -107,31 +146,35 @@ export function createServer(dependencies = {}) {
         const entry = await owner(context.sessionID);
         if (!entry) throw new Error("Sessionbus is not active for this OpenCode session");
         if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length !== 2 || !Object.hasOwn(input, "action") || !Object.hasOwn(input, "arguments")) throw new Error("expected Sessionbus action and arguments");
-        return { content: JSON.stringify(await entry.peer.action(input.action, input.arguments, context.signal)) };
+        const result = entry.forward
+          ? await entry.forward.action(input.action, input.arguments, { sessionID: context.sessionID, messageID: context.messageID, abort: context.signal })
+          : await entry.peer.action(input.action, input.arguments, context.signal);
+        return { content: JSON.stringify(result) };
       },
     }));
     // Only attached sessions and their sub-agents see the tool.
     await ctx.session.hook("context", async (request) => {
       if (!(await owner(request.sessionID))) delete request.tools.sessionbus;
     });
-    // One native event loop: a deleted session leaves the bus; a renamed one
-    // says hello again under its new title (a title outside the bus name
-    // grammar keeps the old one).
-    const events = new AbortController();
+    // One native event loop: a deleted session leaves the bus; a renamed
+    // activated one says hello again under its new title (a title outside the
+    // bus name grammar keeps the old one). A lane's name is the worker's.
     void (async () => {
-      for await (const event of ctx.event.subscribe({ signal: events.signal })) {
+      for await (const event of ctx.event.subscribe({ signal: lifetime.signal })) {
         const data = event?.data;
-        if (event?.type === "session.deleted") void peers.get(data?.sessionID)?.peer.dispose();
-        const renamed = event?.type === "session.renamed" ? peers.get(data?.sessionID) : undefined;
+        const entry = peers.get(data?.sessionID);
+        if (event?.type === "session.deleted" && entry) void release(entry);
+        const renamed = event?.type === "session.renamed" && entry?.peer ? entry : undefined;
         if (renamed && daemonName(data.title) && validate("SessionHelloRequest", { protocol: 1, product: "opencode-peer", session_id: data.sessionID, groups: [], info: { cwd: ctx.location.directory }, name: data.title })) {
           void renamed.peer.rehello(data.title, { cwd: ctx.location.directory }).catch(report);
         }
       }
-    })().catch((error) => { if (!events.signal.aborted) report(error); });
-    // Closes only this instance's Peers; a newer instance's hello supersedes.
+    })().catch((error) => { if (!lifetime.signal.aborted) report(error); });
+    // Closes only this instance's Peers and lane bindings; a newer instance's
+    // hello supersedes, and a lane binds its session again before its next Run.
     return async () => {
-      events.abort();
-      await Promise.allSettled([...peers.values()].map((entry) => entry.peer.dispose()));
+      lifetime.abort();
+      await Promise.allSettled([...peers.values()].map(release));
     };
   };
 }

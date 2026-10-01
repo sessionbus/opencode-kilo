@@ -18,7 +18,24 @@ export const contract = {
       },
       output: { type: "object" },
       // The bus has not admitted the session yet; its Peer keeps connecting.
-      errors: { "sessionbus.not_admitted": { type: "object" } },
+      // A lane holds the session: the TUI stops activating it.
+      errors: { "sessionbus.not_admitted": { type: "object" }, "sessionbus.conflict": { type: "object" } },
+    },
+    // A Sessionbus lane worker binds its session's tool to the worker's
+    // private endpoint before each Run.
+    lane: {
+      input: {
+        type: "object",
+        additionalProperties: false,
+        required: ["sessionID", "socket"],
+        properties: {
+          sessionID: { type: "string" },
+          socket: { type: "string" },
+        },
+      },
+      output: { type: "object" },
+      // Another holder (a managed TUI's Peer or another lane) has the session.
+      errors: { "sessionbus.conflict": { type: "object" } },
     },
   },
   events: {},

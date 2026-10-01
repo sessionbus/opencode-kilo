@@ -74,6 +74,12 @@ export class SessionbusForwarder {
     }).catch((error) => this.#fail(error));
   }
 
+  // Settles when the endpoint connection has closed; the session this
+  // connection serves is released then.
+  get closed() {
+    return this.#closed;
+  }
+
   ready(signal) {
     if (this.#failure) return Promise.reject(this.#failure);
     if (signal?.aborted) return Promise.reject(aborted(signal));

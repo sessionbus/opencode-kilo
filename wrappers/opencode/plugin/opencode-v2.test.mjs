@@ -271,6 +271,76 @@ test("server: the tool serves only activated sessions, which alone see it", asyn
 });
 
 // Fake native TUI context with a controllable route and event stream.
+// Fake lane forwarders: each records its tool calls; end() closes its connection.
+function fakeForwarders() {
+  const forwards = [];
+  const forwarder = (socket) => {
+    let end;
+    const value = { socket, actions: [], disposed: false, closed: new Promise((resolve) => { end = resolve; }) };
+    value.end = end;
+    value.ready = async () => {};
+    value.action = async (action, args, context) => { value.actions.push([action, args, context.sessionID, context.messageID]); return { via: socket }; };
+    value.dispose = async () => { value.disposed = true; end(); };
+    forwards.push(value);
+    return value;
+  };
+  return { forwards, forwarder };
+}
+
+test("server: a lane binds its session's tool to the worker's endpoint, idempotently, with no Peer", async (t) => {
+  const { peers, peer } = fakePeers();
+  const { forwards, forwarder } = fakeForwarders();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer, forwarder })(ctx);
+  assert.deepEqual(await ctx.handlers.lane({ sessionID: "ses_l", socket: "/lane.sock" }), {});
+  assert.deepEqual(await ctx.handlers.lane({ sessionID: "ses_l", socket: "/lane.sock" }), {});
+  assert.equal(forwards.length, 1); assert.equal(peers.length, 0);
+  assert.deepEqual(await ctx.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_l", messageID: "msg_1" }), { content: '{"via":"/lane.sock"}' });
+  assert.deepEqual(forwards[0].actions, [["list", {}, "ses_l", "msg_1"]]);
+  const shown = { sessionID: "ses_l", tools: { sessionbus: {} } };
+  await ctx.hooks.context(shown);
+  assert.deepEqual(Object.keys(shown.tools), ["sessionbus"]);
+  // A lane's name is the worker's: a native rename says no hello.
+  ctx.publish({ type: "session.renamed", data: { sessionID: "ses_l", title: "renamed" } });
+  await flush(); await flush();
+  await cleanup();
+  assert.equal(forwards[0].disposed, true);
+});
+
+test("server: one holder per session: a TUI cannot activate a lane's session, nor a lane bind a TUI's", async (t) => {
+  const { peers, peer } = fakePeers();
+  const { forwards, forwarder } = fakeForwarders();
+  const ctx = serverContext(t);
+  await createServer({ peer, forwarder })(ctx);
+  await ctx.handlers.lane({ sessionID: "ses_l", socket: "/lane.sock" });
+  const refused = await ctx.handlers.activate({ sessionID: "ses_l", socket: "/bus.sock", groups: ["team"] });
+  assert.equal(refused.rpcError?.type, "sessionbus.conflict");
+  assert.equal(peers.length, 0);
+  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] });
+  const taken = await ctx.handlers.lane({ sessionID: "ses_a", socket: "/lane2.sock" });
+  assert.equal(taken.rpcError?.type, "sessionbus.conflict");
+  assert.equal((await ctx.handlers.lane({ sessionID: "ses_l", socket: "/other.sock" })).rpcError?.type, "sessionbus.conflict");
+  assert.equal(forwards.length, 1); assert.equal(peers.length, 1);
+});
+
+test("server: a lane's connection end releases only its own binding; deletion closes it", async (t) => {
+  const { forwards, forwarder } = fakeForwarders();
+  const ctx = serverContext(t);
+  await createServer({ peer: fakePeers().peer, forwarder })(ctx);
+  await ctx.handlers.lane({ sessionID: "ses_l", socket: "/a.sock" });
+  forwards[0].end();
+  await flush();
+  await ctx.handlers.lane({ sessionID: "ses_l", socket: "/b.sock" });
+  // The first connection's end, observed again, must not drop the new binding.
+  forwards[0].end();
+  await flush();
+  assert.deepEqual(await ctx.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_l", messageID: "msg_2" }), { content: '{"via":"/b.sock"}' });
+  ctx.publish({ type: "session.deleted", data: { sessionID: "ses_l" } });
+  for (let i = 0; i < 5 && !forwards[1].disposed; i++) await flush();
+  assert.equal(forwards[1].disposed, true);
+  await assert.rejects(ctx.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_l", messageID: "msg_3" }), /not active/u);
+});
+
 function tuiContext() {
   const listeners = new Map(), calls = [], toasts = [];
   let route = { type: "home" };
