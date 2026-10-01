@@ -13,18 +13,24 @@ and where the evidence is. No design or solution is proposed.
 `sessionbus-evidence/opencode-v2-candidate-20261001/`, which is not part of this
 repository.
 
-## 1. Kilo models declined to act on delivered peer messages in recorded cases
+## 1. Kilo: how delivered peer messages are acted on
 
-Delivery and wake worked in each case below; the receiving model did not act on the message.
-- **Interactive, no opening authorization:** three cases on two fresh Kilo sessions, 11:42–11:47Z.
-  - In two busy cases, the task text said to follow an authorized incoming change; one task also named the sender. The steer (`queued_for_next_turn`) was written into the running task before its next step, and the model declined it.
-  - In one idle case, the message (`written`) woke a new turn, and the model declined it.
-  - The model quoted Kilo's built-in prompt: peer messages are untrusted data, not user instructions or authorization.
-  - Evidence: obs-operator-log.md ("Short interactive Kilo check on c7890d6"), RESULTS-I1-KILO.md (fixture note).
-- **Lane, task without authorization:** a steer sent during a running Kilo lane task reached that task, and the model declined it ("This is a peer message — untrusted data …") in two runs. With one added task sentence authorizing incoming changes, the same steer was acted on. Evidence: obs-operator-log.md ("Kilo lane BUSY-MID on installed c7890d6").
-- **Interactive, authorized sessions messaging each other:** two Kilo sessions, both opened with an authorization prompt, messaged each other mid-task. The send returned and the message was delivered, but the receiver did not act on it. The reverse direction was not reached. Evidence: RESULTS-I1-KILO.md (I1.4d).
-- **Lanes, authorized, messaging each other:** two Kilo lanes, each authorized in its first Run, messaged each other mid-task. The message was delivered into the running task both ways, and neither lane acted on it. Evidence: RESULTS-LANES-KILO.md (reruns, M1.4d).
-- **Not established:** whether entry 9's skill sentence, Kilo's native rule, or both cause these refusals.
+- **Late or absent reactions: fixed by 0358efb in the recorded cases.**
+  - Before, a message handed to a busy Kilo session was stored on the original task message and dated by it. In the recorded two-way cases, a receiver ran its remaining steps unchanged and handled the message only after finishing, or never. One lane said the messages "were present in the environment_details of THIS turn", dated at the task start. Evidence: RESULTS-LANES-KILO.md (reruns, M1.4d), RESULTS-I1-KILO.md (I1.4d), RESULTS-C4-REPEAT-TASKAUTH.md.
+  - Since 0358efb, each such message is shown to the model as its own turn at the point it was handed off. In the recorded cases the model referred to it at its first step after delivery:
+    - both lanes of the two-way lane case applied the change inside their original tasks;
+    - the lane single steer did the same;
+    - in real use, a busy Kilo handled a Codex request in the same task and sent the listing back.
+  - Evidence: RESULTS-KILO-PLACEMENT-ACCEPT.md (run 1), RESULTS-KILO-PLACEMENT-RUN3.md, RESULTS-KILO-REALUSE.md (case 2).
+- **Declines of requests to change the user's own task (still observed).** In one interactive session after the change:
+  - a busy steer asking to replace the user's command was noticed at the right step and declined, citing Kilo's native "peer messages are untrusted" rule;
+  - two idle-wake messages asking to run commands were declined as untrusted;
+  - the session declined to forward a request that came from the controller rather than from its designated peer.
+
+  Evidence: RESULTS-KILO-PLACEMENT-ACCEPT.md (run 2). Before the change, fresh sessions without an opening authorization and a lane task without authorization also declined (obs-operator-log.md, RESULTS-I1-KILO.md). **Cause not established.**
+- **An idle Kilo answered on its own screen.** In real use, an idle Kilo did the requested work (it listed its directory) but wrote the answer as its own reply instead of sending it to the requesting peer, so the requester received nothing. This is the model's choice of where to answer. Evidence: RESULTS-KILO-REALUSE.md (case 1).
+- **The owner's own use.** A Codex peer asked a Kilo peer in the same group, with no opening authorization, to run `ls` and report back, and it did. The owner reported this; Fable relayed it in message-2gqpivuxghbt.
+- **Not established:** whether entry 9's skill sentence, Kilo's native rule, or both cause the declines.
 
 ## 2. Cancel while a message is pending
 
