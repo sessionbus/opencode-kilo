@@ -12,7 +12,9 @@ import (
 )
 
 var interactiveValueOptions = opencodefamily.OpenCodeInteractiveValueOptions()
-var passthroughCommands = []string{"completion", "acp", "mcp", "attach", "run", "debug", "providers", "agent", "upgrade", "uninstall", "serve", "web", "models", "stats", "export", "import", "github", "pr", "session", "plugin", "db"}
+
+// OpenCode v2 top-level subcommands run natively with their argv untouched.
+var passthroughCommands = []string{"upgrade", "update", "uninstall", "acp", "api", "debug", "auth", "mcp", "plugin", "models", "stats", "mini", "run", "session", "service", "reload", "pair", "serve"}
 
 func resumeAlias(arguments []string) ([]string, error) {
 	return opencodefamily.OpenCodeResumeAlias(arguments)
@@ -20,7 +22,6 @@ func resumeAlias(arguments []string) ([]string, error) {
 
 func InteractivePlan(arguments, environment []string) (host.ExecPlan, bool, error) {
 	positional := false
-	pureBooleanValue := false
 	aliased, aliasErr := resumeAlias(arguments)
 	if aliasErr != nil {
 		// A native subcommand or help request keeps its argv untouched.
@@ -29,15 +30,6 @@ func InteractivePlan(arguments, environment []string) (host.ExecPlan, bool, erro
 	plan, native, err := host.ClassifiedInteractivePlan("opencode", aliased, environment, host.PeerIdentity{}, func(value string) bool {
 		return slices.Contains(interactiveValueOptions, value)
 	}, func(value string) bool {
-		if pureBooleanValue {
-			pureBooleanValue = false
-			if value == "true" || value == "false" {
-				return false
-			}
-		}
-		if value == "--pure" {
-			pureBooleanValue = true
-		}
 		if value == "-h" || value == "--help" || value == "-v" || value == "--version" {
 			return true
 		}
@@ -55,9 +47,6 @@ func InteractivePlan(arguments, environment []string) (host.ExecPlan, bool, erro
 	}
 	if aliasErr != nil {
 		return host.ExecPlan{}, false, aliasErr
-	}
-	if err := validateManagedTopology(plan.Args, plan.Env); err != nil {
-		return host.ExecPlan{}, false, err
 	}
 	plan.Env, err = normalizeManagedIdentity(plan.Env)
 	if err != nil {

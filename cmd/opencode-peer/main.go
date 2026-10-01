@@ -66,7 +66,7 @@ func run(ctx context.Context, arguments []string) error {
 			}
 			return syscall.Exec(path, append([]string{path}, plan.Args...), plan.Env)
 		}
-		return opencode.RunInteractive(ctx, plan)
+		return opencode.ExecInteractive(plan)
 	}
 	if len(arguments) != 0 {
 		return errors.New("lane mode accepts no arguments")

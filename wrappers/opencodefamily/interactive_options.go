@@ -14,7 +14,8 @@ import (
 	"github.com/sessionbus/peer-common/host"
 )
 
-var openCodeInteractiveValueOptions = []string{"--log-level", "--port", "--hostname", "--mdns-domain", "--cors", "-m", "--model", "-s", "--session", "--prompt", "--agent", "--replay-limit"}
+// OpenCode v2 TUI options that consume the next argument.
+var openCodeInteractiveValueOptions = []string{"-s", "--session", "--prompt", "--server"}
 
 var kiloInteractiveValueOptions = []string{"--log-level", "--port", "--hostname", "--mdns-domain", "--mdnsDomain", "--cors", "-m", "--model", "-s", "--session", "--prompt", "--agent", "--worktree", "--replay-limit", "--replayLimit"}
 
@@ -27,9 +28,6 @@ func OpenCodeInteractiveValueOptions() []string { return slices.Clone(openCodeIn
 // Native Effect4 Config.boolean is case-sensitive and does not trim: true,
 // yes, on, 1, y are true; false, no, off, 0, n are false. Malformed values are
 // left intact for the native parser rather than silently treated as false.
-func ValidateOpenCodeTopology(arguments, environment []string) error {
-	return validateNativeTopology(arguments, environment, false)
-}
 func ValidateKiloTopology(arguments, environment []string) error {
 	return validateNativeTopology(arguments, environment, true)
 }

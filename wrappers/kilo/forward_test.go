@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package opencode
+package kilo
 
 import (
 	"bytes"
@@ -30,7 +30,7 @@ func (o *forwardOwner) Action(context.Context, string, json.RawMessage) (json.Ra
 }
 func (o *forwardOwner) ActionWithMeta(ctx context.Context, action string, _ json.RawMessage, meta json.RawMessage) (json.RawMessage, error) {
 	var value map[string]map[string]string
-	if json.Unmarshal(meta, &value) != nil || value["sessionbus.opencode"]["session_id"] != "ses_native" || value["sessionbus.opencode"]["message_id"] != "msg_native" {
+	if json.Unmarshal(meta, &value) != nil || value["sessionbus.kilo"]["session_id"] != "ses_native" || value["sessionbus.kilo"]["message_id"] != "msg_native" {
 		return nil, errors.New("native context was not forwarded")
 	}
 	if action == "wait" {
@@ -51,7 +51,7 @@ func TestNativeForwarderAgainstCommonEngine(t *testing.T) {
 				t.Skip("development Node unavailable")
 			}
 			stage := t.TempDir()
-			if err := pluginstage.Stage("../..", "opencode", stage, true); err != nil {
+			if err := pluginstage.Stage("../..", "kilo", stage, true); err != nil {
 				t.Fatal(err)
 			}
 			path := filepath.Join(testsocket.Directory(t), "mcp.sock")

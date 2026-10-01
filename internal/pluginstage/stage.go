@@ -10,14 +10,25 @@ import (
 	"path/filepath"
 )
 
-var runtimeFiles = []string{
-	"activation.mjs", "delivery.mjs", "endpoint.mjs", "forward.mjs", "gate.mjs",
-	"owners.mjs", "peer.mjs", "profile.mjs", "readiness.mjs", "server.mjs", "tui.mjs",
+// Kilo ships the shared family plugin. OpenCode v2 ships its own entries
+// (wrappers/opencode/plugin) over the shared Peer and envelope modules.
+var runtimeFiles = map[string][]string{
+	"kilo": {"activation.mjs", "delivery.mjs", "endpoint.mjs", "forward.mjs", "gate.mjs",
+		"owners.mjs", "peer.mjs", "profile.mjs", "readiness.mjs", "server.mjs", "tui.mjs"},
+	"opencode": {"delivery.mjs", "gate.mjs", "peer.mjs", "profile.mjs"},
 }
-var testFiles = []string{
-	"delivery.test.mjs", "endpoint.test.mjs", "forward.test.mjs", "owners.test.mjs",
-	"peer.test.mjs", "readiness.test.mjs", "readiness-fixture.mjs", "server.test.mjs", "tui.test.mjs",
-	"review-delivery-idle.test.mjs", "review-delivery-receipt.test.mjs", "forward-fixture.mjs", "busy-handoff.test.mjs",
+var productFiles = map[string][]string{
+	"opencode": {"server.mjs", "tui.mjs", "contract.mjs"},
+}
+var testFiles = map[string][]string{
+	"kilo": {"delivery.test.mjs", "endpoint.test.mjs", "forward.test.mjs", "owners.test.mjs",
+		"peer.test.mjs", "readiness.test.mjs", "readiness-fixture.mjs", "server.test.mjs", "tui.test.mjs",
+		"review-delivery-idle.test.mjs", "review-delivery-receipt.test.mjs", "forward-fixture.mjs", "busy-handoff.test.mjs"},
+	// The shared Peer module's own tests run in the Kilo stage.
+	"opencode": {},
+}
+var productTestFiles = map[string][]string{
+	"opencode": {"opencode-v2.test.mjs"},
 }
 
 // Stage copies the fixed product payload into an empty destination. Tests adds
@@ -54,8 +65,13 @@ func Stage(repo, product, destination string, tests bool) error {
 		}
 		return os.WriteFile(target, body, 0o644)
 	}
-	for _, name := range runtimeFiles {
+	for _, name := range runtimeFiles[product] {
 		if err := copyFile(filepath.Join(repo, "wrappers", "opencodefamily", "plugin", name), name); err != nil {
+			return err
+		}
+	}
+	for _, name := range productFiles[product] {
+		if err := copyFile(filepath.Join(repo, "wrappers", product, "plugin", name), name); err != nil {
 			return err
 		}
 	}
@@ -83,8 +99,13 @@ func Stage(repo, product, destination string, tests bool) error {
 		return err
 	}
 	if tests {
-		for _, name := range testFiles {
+		for _, name := range testFiles[product] {
 			if err := copyFile(filepath.Join(repo, "wrappers", "opencodefamily", "plugin", name), name); err != nil {
+				return err
+			}
+		}
+		for _, name := range productTestFiles[product] {
+			if err := copyFile(filepath.Join(repo, "wrappers", product, "plugin", name), name); err != nil {
 				return err
 			}
 		}

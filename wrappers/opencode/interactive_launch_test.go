@@ -7,18 +7,18 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
-	"syscall"
 	"testing"
 	"time"
 
 	"github.com/sessionbus/peer-common/testsocket"
 )
 
-func TestCompiledInteractiveLaunchOwnsChildAndResources(t *testing.T) {
+// The launcher execs native OpenCode: same PID, one launch variable naming that
+// PID, no other Sessionbus variables, argv forwarded, native exit status kept.
+func TestCompiledInteractiveLaunchExecsNative(t *testing.T) {
 	bin := t.TempDir()
 	for _, build := range []struct{ name, source string }{{"opencode", "./wrappers/opencode/testdata/interactive_native.go"}, {"opencode-peer", "./cmd/opencode-peer"}} {
 		command := exec.Command("go", "build", "-o", filepath.Join(bin, build.name), build.source)
@@ -31,8 +31,7 @@ func TestCompiledInteractiveLaunchOwnsChildAndResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	previous := ""
-	for _, mode := range []string{"exit", "exit", "error", "term", "interrupt", "hup"} {
+	for _, mode := range []string{"exit", "error"} {
 		t.Run(mode, func(t *testing.T) {
 			directory := testsocket.Directory(t)
 			listener, err := net.Listen("unix", filepath.Join(directory, "report.sock"))
@@ -42,16 +41,13 @@ func TestCompiledInteractiveLaunchOwnsChildAndResources(t *testing.T) {
 			defer listener.Close()
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
+			socket := filepath.Join(directory, "bus.sock")
 			command := exec.CommandContext(ctx, filepath.Join(bin, "opencode-peer"), "--resume", "ses_resume", "-g", "one,two", "-n", "initial")
 			command.Dir = bin
-			command.Env = []string{"PATH=" + bin, "HOME=" + bin, "SESSIONBUS_SOCKET=" + filepath.Join(directory, "bus.sock"), "SESSIONBUS_SESSION_ID=stale", "OC_TEST_SOCKET=" + listener.Addr().String(), "OC_TEST_MODE=" + mode}
-			if mode == "exit" {
-				command.Env = append(command.Env, "OPENCODE_SERVER_USERNAME=caller", "OPENCODE_SERVER_PASSWORD=caller-password")
-			}
+			command.Env = []string{"PATH=" + bin, "HOME=" + bin, "SESSIONBUS_SOCKET=" + socket, "SESSIONBUS_SESSION_ID=stale", "OC_TEST_SOCKET=" + listener.Addr().String(), "OC_TEST_MODE=" + mode}
 			if err := command.Start(); err != nil {
 				t.Fatal(err)
 			}
-			t.Cleanup(func() { _ = command.Process.Kill() })
 			done := make(chan error, 1)
 			go func() { done <- command.Wait() }()
 			if err := listener.(*net.UnixListener).SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
@@ -62,75 +58,27 @@ func TestCompiledInteractiveLaunchOwnsChildAndResources(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer conn.Close()
-			if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
-				t.Fatal(err)
-			}
 			var report struct {
-				PID, PPID               int
-				CWD, Password, Username string
-				OldID                   string `json:"old_id"`
-				Args                    []string
-				Launch                  interactiveLaunchBinding
+				PID, PPID int
+				CWD       string
+				OldID     string `json:"old_id"`
+				Args      []string
+				Launch    launchBinding
 			}
-			decode := json.NewDecoder(conn)
-			if err := decode.Decode(&report); err != nil {
+			if err := json.NewDecoder(conn).Decode(&report); err != nil {
 				t.Fatal(err)
 			}
-			native, err := os.FindProcess(report.PID)
-			if err != nil {
-				t.Fatal(err)
+			if report.PID != command.Process.Pid || report.Launch.PID != command.Process.Pid {
+				t.Fatalf("native is not the exec'd launcher process: %+v", report)
 			}
-			reaped := false
-			t.Cleanup(func() {
-				if !reaped {
-					_ = native.Signal(syscall.SIGTERM)
-				}
-			})
-			if report.PPID != command.Process.Pid || report.Launch.PID != command.Process.Pid || report.OldID != "" {
-				t.Fatalf("wrong direct native ownership: %+v", report)
+			if report.OldID != "" || report.Launch.Socket != socket || report.Launch.Name != "initial" || !slices.Equal(report.Launch.Groups, []string{"one", "two"}) {
+				t.Fatalf("launch selection: %+v", report)
 			}
-			if !slices.Equal(report.Args, []string{"--hostname=127.0.0.1", "--port=0", "-s", "ses_resume"}) || report.CWD != canonicalBin {
+			if !slices.Equal(report.Args, []string{"-s", "ses_resume"}) || report.CWD != canonicalBin {
 				t.Fatalf("native argv/cwd changed: %+v", report)
-			}
-			if !slices.Equal(report.Launch.Groups, []string{"one", "two"}) || report.Launch.Name != "initial" {
-				t.Fatal(report.Launch)
-			}
-			if report.Launch.Directory == previous {
-				t.Fatal("resume reused launch resources")
-			}
-			previous = report.Launch.Directory
-			if mode == "exit" {
-				if report.Username != "caller" || report.Password != "caller-password" {
-					t.Fatal("caller auth changed")
-				}
-			} else if len(report.Password) != 64 {
-				t.Fatal("per-launch native auth absent")
-			}
-			if mode == "interrupt" {
-				if err := command.Process.Signal(os.Interrupt); err != nil {
-					t.Fatal(err)
-				}
-				if err := native.Signal(os.Interrupt); err != nil {
-					t.Fatal(err)
-				}
-				var event map[string]string
-				if err := decode.Decode(&event); err != nil || event["event"] != "interrupt" {
-					t.Fatalf("native interrupt translated into exit/TERM: %v %v", event, err)
-				}
-			}
-			if mode == "term" || mode == "interrupt" {
-				if err := command.Process.Signal(syscall.SIGTERM); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if mode == "hup" {
-				if err := command.Process.Signal(syscall.SIGHUP); err != nil {
-					t.Fatal(err)
-				}
 			}
 			select {
 			case err := <-done:
-				reaped = true
 				if mode == "error" {
 					var exit *exec.ExitError
 					if !errors.As(err, &exit) || exit.ExitCode() != 23 {
@@ -140,13 +88,7 @@ func TestCompiledInteractiveLaunchOwnsChildAndResources(t *testing.T) {
 					t.Fatal(err)
 				}
 			case <-ctx.Done():
-				t.Fatal("launcher did not join native exit", ctx.Err())
-			}
-			if _, err := os.Stat(report.Launch.Directory); !errors.Is(err, os.ErrNotExist) {
-				t.Fatal("owned runtime directory retained", err)
-			}
-			if err := native.Signal(syscall.Signal(0)); err == nil {
-				t.Fatal("native PID survived joined launcher")
+				t.Fatal("native did not exit", ctx.Err())
 			}
 		})
 	}

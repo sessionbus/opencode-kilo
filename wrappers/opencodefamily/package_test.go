@@ -106,7 +106,14 @@ func testLiteralNativeArchive(t *testing.T, product string) {
 	if skills != 1 {
 		t.Fatal("wrong generic skill count", skills)
 	}
-	for _, entry := range []string{"server.mjs", "tui.mjs", "peer.mjs", "owners.mjs", "delivery.mjs", "sessionbus-tool.json"} {
+	entries := []string{"server.mjs", "tui.mjs", "peer.mjs", "owners.mjs", "delivery.mjs", "sessionbus-tool.json"}
+	// Without managed launch metadata neither native entry activates.
+	imports := `import server from './server.mjs'; import tui from './tui.mjs'; if (Object.keys(await server.server()).length || await tui.tui({}) !== undefined) throw Error('ordinary activation');`
+	if product == "opencode" {
+		entries = []string{"server.mjs", "tui.mjs", "contract.mjs", "peer.mjs", "delivery.mjs", "sessionbus-tool.json"}
+		imports = `import server from './server.mjs'; import tui from './tui.mjs'; if (server.id !== 'sessionbus' || typeof server.setup !== 'function' || await tui.setup({}) !== undefined) throw Error('ordinary activation');`
+	}
+	for _, entry := range entries {
 		if !modules["plugin/"+entry] {
 			t.Fatal("missing native module", entry)
 		}
@@ -115,7 +122,7 @@ func testLiteralNativeArchive(t *testing.T, product string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	check := exec.Command(node, "--input-type=module", "-e", `import server from './server.mjs'; import tui from './tui.mjs'; if (Object.keys(await server.server()).length || await tui.tui({}) !== undefined) throw Error('ordinary activation');`)
+	check := exec.Command(node, "--input-type=module", "-e", imports)
 	check.Dir = filepath.Join(payload, "plugin")
 	check.Env = []string{"PATH=" + os.Getenv("PATH")}
 	if output, err := check.CombinedOutput(); err != nil {

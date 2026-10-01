@@ -3,16 +3,55 @@
 package opencode
 
 import (
-	"context"
+	"encoding/json"
+	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
+	"strings"
+	"syscall"
+
 	"github.com/sessionbus/opencode-kilo/wrappers/opencodefamily"
 	"github.com/sessionbus/peer-common/host"
 )
 
-const InteractiveLaunchEnv = opencodefamily.OpenCodeInteractiveLaunchEnv
+// LaunchEnv carries one managed launch's Sessionbus selection to the native
+// TUI plugin. The plugin activates only in the process with this PID: exec
+// keeps it, while children of the shared native service inherit the variable
+// from whichever TUI started that service and never match.
+const LaunchEnv = "SESSIONBUS_OPENCODE_LAUNCH"
 
-type interactiveLaunchBinding = opencodefamily.InteractiveLaunchBinding
+type launchBinding struct {
+	PID    int      `json:"pid"`
+	Socket string   `json:"socket"`
+	Name   string   `json:"name,omitempty"`
+	Groups []string `json:"groups"`
+}
 
-// RunInteractive keeps the existing OpenCode entry over the shared native lifetime.
-func RunInteractive(ctx context.Context, plan host.ExecPlan) error {
-	return opencodefamily.RunOpenCodeInteractive(ctx, plan)
+// ExecInteractive replaces this process with the native OpenCode TUI. The
+// background service and the plugin own everything after exec.
+func ExecInteractive(plan host.ExecPlan) error {
+	path, err := exec.LookPath(plan.Path)
+	if err != nil {
+		return err
+	}
+	value := func(key string) string { return opencodefamily.InteractiveEnvironmentValue(plan.Env, key) }
+	if !filepath.IsAbs(value(host.SocketEnv)) {
+		return errors.New("managed Sessionbus socket must be absolute")
+	}
+	if value(host.LocalKeyEnv) != "" {
+		return errors.New("local key transport is not supported")
+	}
+	binding := launchBinding{PID: os.Getpid(), Socket: value(host.SocketEnv), Name: value(host.NameEnv)}
+	if err := json.Unmarshal([]byte(value(host.GroupsEnv)), &binding.Groups); err != nil {
+		return err
+	}
+	encoded, err := json.Marshal(binding)
+	if err != nil {
+		return err
+	}
+	environment := slices.DeleteFunc(slices.Clone(plan.Env), func(entry string) bool { return strings.HasPrefix(entry, "SESSIONBUS_") })
+	environment = append(environment, LaunchEnv+"="+string(encoded))
+	return syscall.Exec(path, append([]string{path}, plan.Args...), environment)
 }

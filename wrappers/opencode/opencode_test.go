@@ -9,8 +9,9 @@ import (
 )
 
 func TestInteractiveArity(t *testing.T) {
-	plan, native, err := InteractivePlan([]string{"--log-level", "-g", "team"}, []string{"PATH=/bin"})
-	if err != nil || native || !slices.Equal(plan.Args, []string{"--log-level", "-g", "team"}) {
+	// A native value option keeps its next token, even one that looks like ours.
+	plan, native, err := InteractivePlan([]string{"--prompt", "-g", "team"}, []string{"PATH=/bin"})
+	if err != nil || native || !slices.Equal(plan.Args, []string{"--prompt", "-g", "team"}) {
 		t.Fatalf("arity plan = %#v/%v/%v", plan, native, err)
 	}
 	if !slices.Contains(plan.Env, host.SocketEnv+"="+sessionkit.Socket()) {
@@ -24,11 +25,8 @@ func TestInteractiveArity(t *testing.T) {
 	if err != nil || native || !slices.Equal(plan.Args, []string{"/work/project", "run"}) {
 		t.Fatalf("project = %#v/%v/%v", plan, native, err)
 	}
-	if _, _, err = InteractivePlan([]string{"--pure=true"}, nil); err == nil {
-		t.Fatal("--pure accepted")
-	}
-	plan, native, err = InteractivePlan([]string{"--log-level", "--pure"}, nil)
-	if err != nil || native || !slices.Equal(plan.Args, []string{"--log-level", "--pure"}) {
-		t.Fatalf("native pure value = %#v/%v/%v", plan, native, err)
+	plan, native, err = InteractivePlan([]string{"--server", "service", "-c"}, nil)
+	if err != nil || native || !slices.Equal(plan.Args, []string{"--server", "service", "-c"}) {
+		t.Fatalf("native server value = %#v/%v/%v", plan, native, err)
 	}
 }
