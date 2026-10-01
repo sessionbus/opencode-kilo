@@ -78,18 +78,20 @@ export function createServer(dependencies = {}) {
       }, { once: true });
     };
     await ctx.rpc.register(contract, {
-      activate: async (input) => {
+      activate: async (input, context) => {
         // Idempotent: the TUI activates again after reconnects and unloads.
         await attach(input.sessionID, input);
         // Activation reports success only once the bus has admitted the
-        // session; otherwise the TUI shows why. A refused Peer reports its
-        // refusal, and an unreachable daemon keeps being retried.
+        // session. Not yet admitted is the declared transient error: the TUI
+        // keeps the session for the next native event while the Peer keeps
+        // connecting. A refused Peer reports its refusal; a cancelled RPC ends
+        // only this wait.
         const entry = peers.get(input.sessionID);
         if (entry) {
           try {
-            await entry.peer.ready(AbortSignal.timeout(admissionWait));
+            await entry.peer.ready(AbortSignal.any([context.signal, AbortSignal.timeout(admissionWait)]));
           } catch (error) {
-            if (error?.name === "TimeoutError") throw new Error("the bus has not admitted this session yet; still connecting");
+            if (error?.name === "TimeoutError") return context.error("sessionbus.not_admitted", "the bus has not admitted this session yet; still connecting", {});
             throw error;
           }
         }

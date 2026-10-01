@@ -17,6 +17,8 @@ export const contract = {
         },
       },
       output: { type: "object" },
+      // The bus has not admitted the session yet; its Peer keeps connecting.
+      errors: { "sessionbus.not_admitted": { type: "object" } },
     },
   },
   events: {},

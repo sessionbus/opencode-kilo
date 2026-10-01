@@ -11,7 +11,12 @@ const message = { message_id: "m1", body: "hello", from: { session_id: "sender@h
 // Fake native server ctx: records registrations and prompts.
 function serverContext(t, prompt = async () => ({})) {
   const ctx = { location: { directory: "/work" }, prompts: [], updates: [] };
-  ctx.rpc = { register: async (_contract, handlers) => { ctx.handlers = handlers; return { dispose: async () => {} }; } };
+  // Native hands each handler its RPC context: the call's signal and the declared-error factory.
+  ctx.rpc = { register: async (_contract, handlers) => {
+    ctx.handlers = Object.fromEntries(Object.entries(handlers).map(([name, handler]) => [name, (input, signal = new AbortController().signal) =>
+      handler(input, { signal, error: (type, message, data) => ({ rpcError: { type, message, data } }) })]));
+    return { dispose: async () => {} };
+  } };
   ctx.session = {
     get: async ({ sessionID }) => ({ id: sessionID, title: "native title" }),
     prompt: async (input) => { ctx.prompts.push(input); return prompt(input); },
@@ -102,8 +107,15 @@ test("server: activation succeeds only once the bus admits the session; otherwis
   // Admitted within the wait: activation succeeds.
   const first = ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] });
   await flush(); admit(); await first;
-  // Unreachable bus: activation reports it; the Peer stays and keeps trying.
-  await assert.rejects(ctx.handlers.activate({ sessionID: "ses_b", socket: "/absent.sock", groups: ["team"] }), /not admitted this session yet; still connecting/u);
+  // Unreachable bus: activation returns the declared transient error; the Peer stays and keeps trying.
+  assert.deepEqual(await ctx.handlers.activate({ sessionID: "ses_b", socket: "/absent.sock", groups: ["team"] }),
+    { rpcError: { type: "sessionbus.not_admitted", message: "the bus has not admitted this session yet; still connecting", data: {} } });
+  assert.equal(peers.length, 2); assert.equal(peers[1].disposed, false);
+  // A cancelled RPC ends only its wait; the Peer stays.
+  const cancel = new AbortController();
+  const cancelled = ctx.handlers.activate({ sessionID: "ses_b", socket: "/absent.sock", groups: ["team"] }, cancel.signal);
+  await flush(); cancel.abort(new Error("rpc cancelled"));
+  await assert.rejects(cancelled, /rpc cancelled/u);
   assert.equal(peers.length, 2); assert.equal(peers[1].disposed, false);
   // A later activation of the same session waits again on the same Peer.
   const again = ctx.handlers.activate({ sessionID: "ses_b", socket: "/absent.sock", groups: ["team"] });
@@ -445,6 +457,24 @@ test("tui: a plugin instance re-created in the same TUI does not repeat the laun
   await createTui(environment, { solid: againSolid })(again);
   again.show("ses_new"); await flush(); await flush();
   assert.deepEqual(again.calls, [["activate", { sessionID: "ses_new", socket: "/bus.sock", groups: ["team"] }, { location: { directory: "/work" } }]]);
+});
+
+test("tui: a session the bus has not admitted yet stays activated on the next native event", async () => {
+  const { ctx, solid } = tuiContext();
+  ctx.fail = Object.assign(new Error("the bus has not admitted this session yet; still connecting"), { type: "sessionbus.not_admitted" });
+  await createTui(launch({ name: "" }), { solid })(ctx);
+  ctx.show("ses_a"); await flush(); await flush();
+  assert.equal(ctx.toasts.length, 1); assert.match(ctx.toasts[0].message, /not admitted this session yet/u);
+  // The bus becomes reachable; the next native event activates the same session again.
+  ctx.fail = undefined;
+  ctx.emit("server.connected"); await flush(); await flush();
+  assert.deepEqual(ctx.calls.filter((call) => call[0] === "activate").map((call) => call[1].sessionID), ["ses_a", "ses_a"]);
+  // A permanent failure still ends that session's activation.
+  ctx.fail = Object.assign(new Error("invalid_hello"), { type: "rpc.internal" });
+  ctx.emit("server.connected"); await flush(); await flush();
+  ctx.fail = undefined;
+  ctx.emit("server.connected"); await flush(); await flush();
+  assert.equal(ctx.calls.filter((call) => call[0] === "activate").length, 3);
 });
 
 test("tui: native unload of its directory and reconnect each trigger one activation; cleanup stops all", async () => {

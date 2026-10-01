@@ -8,7 +8,8 @@ const launchEnv = "SESSIONBUS_OPENCODE_LAUNCH";
 // this TUI shows is activated in its directory's server instance. While the TUI
 // stays open, native `location.shutdown` (the directory was unloaded) and
 // `server.connected` (reconnect) each trigger one activation attempt for the
-// affected sessions. A session native shows before creating it on the service
+// affected sessions; so does a session the bus has not admitted yet (its Peer
+// keeps connecting). A session native shows before creating it on the service
 // (a --prompt session is mounted optimistically) is activated once native
 // announces `session.created` for it. A failure is reported; an unavailable
 // service or location waits for the next native event, and any other failure
@@ -51,7 +52,7 @@ export function createTui(environment = process.env, dependencies = {}) {
         // Not created yet: it is already pending. A late rejection after
         // another attempt succeeded changes nothing.
         if (closed || error?._tag === "SessionNotFoundError") return;
-        const waits = error?.type === undefined || error.type === "rpc.unavailable";
+        const waits = error?.type === undefined || error.type === "rpc.unavailable" || error.type === "sessionbus.not_admitted";
         if (!waits) {
           sessions.delete(sessionID);
           pending.delete(sessionID);
