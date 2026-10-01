@@ -100,7 +100,7 @@ func testNativePackageBoundary(t *testing.T, product string) {
 	wantFiles := []string{"README.md", "activation.mjs", "delivery.mjs", "endpoint.mjs", "forward.mjs", "gate.mjs", "owners.mjs", "peer.mjs", "profile.mjs", "readiness.mjs", "server.mjs", "sessionbus-tool.json", "skills", "tui.mjs"}
 	if product == "opencode" {
 		// OpenCode v2 entries over the shared Peer and envelope modules.
-		wantFiles = []string{"README.md", "contract.mjs", "delivery.mjs", "gate.mjs", "peer.mjs", "profile.mjs", "server.mjs", "sessionbus-tool.json", "skills", "tui.mjs"}
+		wantFiles = []string{"README.md", "contract.mjs", "delivery.mjs", "forward.mjs", "gate.mjs", "peer.mjs", "profile.mjs", "server.mjs", "sessionbus-tool.json", "skills", "tui.mjs"}
 	}
 	sort.Strings(manifest.Files)
 	if !equalStrings(manifest.Files, wantFiles) {

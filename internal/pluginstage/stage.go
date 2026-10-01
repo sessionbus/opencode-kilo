@@ -15,7 +15,7 @@ import (
 var runtimeFiles = map[string][]string{
 	"kilo": {"activation.mjs", "delivery.mjs", "endpoint.mjs", "forward.mjs", "gate.mjs",
 		"owners.mjs", "peer.mjs", "profile.mjs", "readiness.mjs", "server.mjs", "tui.mjs"},
-	"opencode": {"delivery.mjs", "gate.mjs", "peer.mjs", "profile.mjs"},
+	"opencode": {"delivery.mjs", "forward.mjs", "gate.mjs", "peer.mjs", "profile.mjs"},
 }
 var productFiles = map[string][]string{
 	"opencode": {"server.mjs", "tui.mjs", "contract.mjs"},

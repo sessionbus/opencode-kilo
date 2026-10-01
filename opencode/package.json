@@ -21,6 +21,7 @@
     "gate.mjs",
     "profile.mjs",
     "delivery.mjs",
+    "forward.mjs",
     "sessionbus-tool.json",
     "skills"
   ],
