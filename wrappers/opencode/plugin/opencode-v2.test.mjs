@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Peer } from "@sessionbus/kit";
 import { createServer } from "./server.mjs";
 import { createTui } from "./tui.mjs";
 
@@ -17,14 +18,25 @@ function serverContext(t, prompt = async () => ({})) {
     hook: async (name, callback) => { ctx.hooks = { ...ctx.hooks, [name]: callback }; return { dispose: async () => {} }; },
   };
   ctx.tool = { transform: async (callback) => { callback({ add: (tool) => { ctx.tool.added = tool; } }); return { dispose: async () => {} }; } };
+  // Native event stream the test feeds with ctx.publish(event).
+  const pending = [];
+  let wake;
+  ctx.publish = (event) => { pending.push(event); wake?.(); };
+  ctx.event = { subscribe: ({ signal }) => ({ async *[Symbol.asyncIterator]() {
+    while (!signal.aborted) {
+      if (!pending.length) await new Promise((resolve) => { wake = resolve; signal.addEventListener("abort", resolve, { once: true }); });
+      while (pending.length) yield pending.shift();
+    }
+  } }) };
   return ctx;
 }
 function fakePeers() {
   const peers = [];
   const peer = (identity, deliver, env) => {
-    const value = { identity, deliver, env, disposed: false, actions: [], signal: new AbortController().signal };
+    const controller = new AbortController();
+    const value = { identity, deliver, env, disposed: false, actions: [], signal: controller.signal };
     value.action = async (action, args) => { value.actions.push([action, args]); return { ok: true }; };
-    value.dispose = async () => { value.disposed = true; };
+    value.dispose = async () => { value.disposed = true; controller.abort(); };
     peers.push(value);
     return value;
   };
@@ -50,13 +62,38 @@ test("server: activate is idempotent, names the peer and delivers as one native 
   assert.ok(peers.every((value) => value.disposed));
 });
 
-test("server: a refused native prompt is reported as the refusal it is, never retried", async (t) => {
+// Through the pinned kit's own message.deliver mapping: a failed native prompt
+// may already be admitted, so the bus gets an uncertain error, not a refusal.
+test("server: a failed native prompt is an uncertain outcome at the bus, never a refusal or a retry", async (t) => {
   const { peers, peer } = fakePeers();
-  const ctx = serverContext(t, async () => { throw new Error("session not found"); });
-  await createServer({ peer })(ctx);
+  const ctx = serverContext(t, async () => { throw new Error("instance closing"); });
+  const cleanup = await createServer({ peer })(ctx);
   await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] });
-  assert.deepEqual(await peers[0].deliver(undefined, message), { disposition: "rejected", reason: "session not found" });
+  const kit = new Peer({ product: "opencode-peer", session_id: "ses_a", groups: ["team"] }, peers[0].deliver, { SESSIONBUS_SOCKET: "/nonexistent/bus.sock" }, { connect: () => { throw new Error("offline"); }, schedule: () => {} });
+  const replies = [];
+  const connection = { result: async (_request, value) => { replies.push(["result", value]); }, error: async (_request, code, data) => { replies.push(["error", code, data]); }, close() {} };
+  kit.connection = connection; kit.admitted = kit.identity; kit.identityController = new AbortController();
+  kit._handle({ method: "message.deliver", params: message }, connection);
+  for (let i = 0; i < 5 && !replies.length; i++) await flush();
+  assert.deepEqual(replies, [["error", -32603, "instance closing"]]);
   assert.equal(ctx.prompts.length, 1);
+  kit.shutdown();
+  await cleanup();
+});
+
+test("server: a natively deleted session leaves the bus; others stay", async (t) => {
+  const { peers, peer } = fakePeers();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer })(ctx);
+  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] });
+  await ctx.handlers.activate({ sessionID: "ses_b", socket: "/bus.sock", groups: ["team"] });
+  ctx.publish({ type: "session.deleted", data: { sessionID: "ses_other" } });
+  ctx.publish({ type: "session.deleted", data: { sessionID: "ses_a" } });
+  for (let i = 0; i < 5 && !peers[0].disposed; i++) await flush();
+  assert.equal(peers[0].disposed, true); assert.equal(peers[1].disposed, false);
+  await assert.rejects(ctx.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_a" }), /not active/u);
+  await cleanup();
+  assert.equal(peers[1].disposed, true);
 });
 
 test("server: the tool serves only activated sessions, which alone see it", async (t) => {

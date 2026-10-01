@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-import { validate } from "@sessionbus/kit";
+import { ProtocolError, validate } from "@sessionbus/kit";
 import declaration from "./sessionbus-tool.json" with { type: "json" };
 import { contract } from "./contract.mjs";
 import { renderDelivery } from "./delivery.mjs";
@@ -24,10 +24,11 @@ export function createServer(dependencies = {}) {
         const peer = connect(identity, async (_signal, message) => {
           try {
             await ctx.session.prompt({ sessionID: input.sessionID, text: renderDelivery(message), delivery: "steer" });
-            return { disposition: "injected" };
           } catch (error) {
-            return { disposition: "rejected", reason: String(error?.message || error) };
+            // Native may already have admitted it: an uncertain outcome, never a refusal.
+            throw new ProtocolError({ code: -32603, message: "internal", data: String(error?.message || error) });
           }
+          return { disposition: "injected" };
         }, { SESSIONBUS_SOCKET: input.socket });
         peers.set(input.sessionID, peer);
         peer.signal.addEventListener("abort", () => {
@@ -52,8 +53,18 @@ export function createServer(dependencies = {}) {
     await ctx.session.hook("context", (request) => {
       if (!peers.has(request.sessionID)) delete request.tools.sessionbus;
     });
+    // A deleted native session leaves the bus.
+    const events = new AbortController();
+    void (async () => {
+      for await (const event of ctx.event.subscribe({ signal: events.signal })) {
+        if (event?.type === "session.deleted") void peers.get(event.data?.sessionID)?.dispose();
+      }
+    })().catch((error) => { if (!events.signal.aborted) console.error(`sessionbus: ${error?.message || error}`); });
     // Closes only this instance's Peers; a newer instance's hello supersedes.
-    return async () => { await Promise.allSettled([...peers.values()].map((peer) => peer.dispose())); };
+    return async () => {
+      events.abort();
+      await Promise.allSettled([...peers.values()].map((peer) => peer.dispose()));
+    };
   };
 }
 

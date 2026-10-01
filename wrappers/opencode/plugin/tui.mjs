@@ -26,7 +26,7 @@ export function createTui(environment = process.env, dependencies = {}) {
       void (async () => {
         if (title) await context.client.session.update({ sessionID, title });
         if (closed) return;
-        await context.client.rpc(contract).activate({ sessionID, socket: launch.socket, groups: launch.groups, ...(title ? { name: title } : {}) }, { location: { directory: location.directory } });
+        await context.client.rpc(contract).activate({ sessionID, socket: launch.socket, groups: launch.groups, ...(title ? { name: title } : {}) }, { location });
       })().catch((error) => {
         if (closed) return;
         const waits = error?.type === undefined || error.type === "rpc.unavailable";
@@ -40,7 +40,7 @@ export function createTui(environment = process.env, dependencies = {}) {
         if (closed || route.type !== "session" || sessions.has(route.sessionID)) return;
         const shown = context.data.session.get(route.sessionID)?.location ?? context.location;
         if (!shown?.directory) return;
-        sessions.set(route.sessionID, { directory: shown.directory, workspaceID: shown.directory === context.location?.directory ? context.location?.workspaceID : undefined });
+        sessions.set(route.sessionID, shown);
         const title = name;
         name = undefined;
         activate(route.sessionID, title);
