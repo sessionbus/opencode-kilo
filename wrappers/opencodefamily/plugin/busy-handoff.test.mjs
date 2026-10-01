@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import net from "node:net";
 import test from "node:test";
-import { NativeDelivery, nextPartID } from "./delivery.mjs";
+import { NativeDelivery, deliveryEnvelope, nextPartID, placeHandoffs } from "./delivery.mjs";
 import { createServer } from "./server.mjs";
 import { InteractiveEndpoint } from "./endpoint.mjs";
 import { publishEndpoint } from "./readiness.mjs";
@@ -230,4 +230,66 @@ test("a synthetic user added after the prompt (observed with a skills plugin) is
   await hooks["experimental.chat.messages.transform"]({}, { messages });
   assert.deepEqual(requests, [{ sessionID: "ses_s", messageID: "msg_skills", after: "prt_000000000002ABCDEFGHIJKLMN" }]);
   assert.equal(synthetic.parts.at(-1).text, "queued");
+});
+
+const base = 1790879142000;
+const envelope = `${deliveryEnvelope}from="peer" from-session="peer@host">\nRECIP\n</cross-session-message>`;
+const handed = (messageID, at, text = envelope) => ({ id: nextPartID("prt_000000000001ABCDEFGHIJKLMN", at), sessionID: "ses_s", messageID, type: "text", text });
+const prompt = (id, created, extra = []) => ({ info: { id, sessionID: "ses_s", role: "user", time: { created } }, parts: [{ id: "prt_000000000001ABCDEFGHIJKLMN", sessionID: "ses_s", messageID: id, type: "text", text: "task" }, ...extra] });
+const reply = (id, created, completed) => ({ info: { id, sessionID: "ses_s", role: "assistant", time: completed === undefined ? { created } : { created, completed } }, parts: [] });
+
+test("a handed-off part becomes its own user turn before the step that received it, on later calls too", () => {
+  // Lane A (C4 repeat): the step's assistant record was created just before the pull and completed after it.
+  const part = handed("msg_task", base + 14386);
+  const task = prompt("msg_task", base, [part]), info = task.info;
+  const messages = [task, reply("msg_a1", base + 100, base + 13000), reply("msg_a3", base + 14275, base + 31000), reply("msg_a4", base + 31100, base + 46000)];
+  placeHandoffs(messages, base + 60000);
+  assert.deepEqual(messages.map((message) => message.info.id), ["msg_task", "msg_a1", `msg_${part.id.slice(4)}`, "msg_a3", "msg_a4"]);
+  const entry = messages[2];
+  assert.equal(entry.info.role, "user"); assert.equal(entry.info.time.created, base + 14386);
+  assert.equal(entry.parts.length, 1); assert.equal(entry.parts[0], part); assert.equal(entry.parts[0].text, envelope);
+  assert.equal(task.parts.length, 1); assert.equal(task.info, info); assert.equal(info.time.created, base); assert.notEqual(entry.info, info);
+});
+
+test("on the delivery step the turn is last, before an unfinished assistant, in pull order", () => {
+  const first = handed("msg_task", base + 5000), second = handed("msg_task", base + 6000);
+  const messages = [prompt("msg_task", base, [first, second]), reply("msg_a1", base + 100, base + 4000)];
+  placeHandoffs(messages, base + 7000);
+  assert.deepEqual(messages.map((message) => message.info.id), ["msg_task", "msg_a1", `msg_${first.id.slice(4)}`, `msg_${second.id.slice(4)}`]);
+  const later = [prompt("msg_task", base, [handed("msg_task", base + 5000)]), reply("msg_a1", base + 100, base + 4000), reply("msg_a2", base + 4500)];
+  placeHandoffs(later, base + 7000);
+  assert.deepEqual(later.map((message) => message.info.role), ["user", "assistant", "user", "assistant"]);
+});
+
+test("after compaction a retained handoff stays after the message it was stored on", () => {
+  // Compacted call array: [compaction user, summary, retained task and its step, continue user]; the summary completed last.
+  const part = handed("msg_task", base + 500);
+  const messages = [prompt("msg_compact", base + 900), reply("msg_summary", base + 950, base + 1000), prompt("msg_task", base, [part]),
+    reply("msg_a1", base + 100, base + 600), prompt("msg_continue", base + 1100)];
+  placeHandoffs(messages, base + 2000);
+  assert.deepEqual(messages.map((message) => message.info.id), ["msg_compact", "msg_summary", "msg_task", `msg_${part.id.slice(4)}`, "msg_a1", "msg_continue"]);
+});
+
+test("a part with no usable pull time, other text and a delivery that is the message itself stay in place", () => {
+  const future = prompt("msg_future", base, [handed("msg_future", base + 5000)]);
+  const undated = prompt("msg_undated", base, [handed("msg_undated", base + 10)]); delete undated.info.time;
+  const plain = prompt("msg_plain", base, [handed("msg_plain", base + 10, "not a delivery")]);
+  const wake = { info: { id: "msg_wake", sessionID: "ses_s", role: "user", time: { created: base } }, parts: [handed("msg_wake", base + 10)] };
+  const messages = [future, undated, plain, wake];
+  placeHandoffs(messages, base + 1000);
+  assert.deepEqual(messages.map((message) => [message.info.id, message.parts.length]), [["msg_future", 2], ["msg_undated", 2], ["msg_plain", 2], ["msg_wake", 1]]);
+});
+
+test("the transform presents this call's handoff as the last user turn and leaves a head without the newest prompt alone", { timeout: 5000 }, async (t) => {
+  const f = await lane(t, (args) => { f.written.push({ id: args.part_id, sessionID: args.session_id, messageID: args.message_id, type: "text", text: envelope }); });
+  await f.hooks["chat.message"]({ sessionID: "ses_s" }, { message: { id: "msg_new", sessionID: "ses_s", role: "user" }, parts: [] });
+  const created = Date.now() - 1000;
+  const head = [prompt("msg_old", created - 5000, [handed("msg_old", created - 4000)]), reply("msg_o1", created - 4500, created - 3000)];
+  await f.hooks["experimental.chat.messages.transform"]({}, { messages: head });
+  assert.deepEqual(head.map((message) => [message.info.id, message.parts.length]), [["msg_old", 2], ["msg_o1", 0]]);
+  const current = prompt("msg_new", created);
+  const messages = [current, reply("msg_a1", created + 10, created + 500)];
+  await f.hooks["experimental.chat.messages.transform"]({}, { messages });
+  assert.equal(current.parts.length, 1); assert.equal(messages.length, 3);
+  assert.equal(messages[2].info.role, "user"); assert.equal(messages[2].parts[0].text, envelope); assert.equal(messages[2].parts[0].id, f.written[0].id);
 });

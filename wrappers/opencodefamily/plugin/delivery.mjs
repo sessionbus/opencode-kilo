@@ -5,6 +5,9 @@ import { createHash, randomBytes } from "node:crypto";
 
 export const deliveryLimits = Object.freeze({ messages: 64, ownerBytes: 1024 * 1024, totalBytes: 16 * 1024 * 1024 });
 
+// Opening of every rendered delivery, here and in the Go lane renderer.
+export const deliveryEnvelope = "<cross-session-message ";
+
 // Preserve the product's retained structured sender rendering. The native
 // message ID identifies this submission; it is never a session identity.
 export function renderDelivery(request) {
@@ -13,7 +16,7 @@ export function renderDelivery(request) {
   const metadata = JSON.stringify({ fromProduct: request.from.product, messageId: request.message_id, groups: request.from.groups || [] })
     .replace(/[<>&\u2028\u2029]/gu, (character) => escaped[character]);
   const body = request.body.replace(/<\/cross-session-message/giu, "<\\/cross-session-message");
-  return `<cross-session-message from="${clean(request.from.name || request.from.session_id)}" from-session="${clean(request.from.session_id)}">\n[sessionbus-metadata: ${metadata}]\n${body}\n</cross-session-message>`;
+  return `${deliveryEnvelope}from="${clean(request.from.name || request.from.session_id)}" from-session="${clean(request.from.session_id)}">\n[sessionbus-metadata: ${metadata}]\n${body}\n</cross-session-message>`;
 }
 
 // Native orders a message's parts by ID (fixed-width `prt_` + 12 hex + 14
@@ -28,6 +31,47 @@ export function nextPartID(after, now = Date.now(), entropy = randomBytes) {
   if (head <= floor) head = floor + 1n;
   if (head > 0xffffffffffffn) return undefined;
   return `prt_${head.toString(16).padStart(12, "0")}${[...entropy(14)].map((byte) => base62[byte % 62]).join("")}`;
+}
+
+const partClock = 2 ** 36;
+// The pull time of a part named by nextPartID, which keeps the low 36 bits of
+// its millisecond clock: the first time at or after its message's native
+// creation with those bits. Unusable unless that is no later than now.
+function pullTime(id, created, now) {
+  if (typeof id !== "string" || !/^prt_[0-9a-f]{12}/u.test(id) || !Number.isSafeInteger(created)) return undefined;
+  const low = Number(BigInt(`0x${id.slice(4, 16)}`) >> 12n);
+  const time = created + ((((low - created) % partClock) + partClock) % partClock);
+  return time <= now ? time : undefined;
+}
+
+// Position only. A handed-off message is stored as a part of the prompt it
+// was pulled for, and native dates every user message by its creation, so the
+// model would read it as part of the original task. In this call's array only,
+// each such part becomes its own user turn at its pull time: before the first
+// later assistant that completed after it or has not completed, else at the end.
+// Its text, the stored messages and native's own records stay as they are.
+export function placeHandoffs(messages, now = Date.now()) {
+  const moved = [];
+  for (const message of messages) {
+    if (message?.info?.role !== "user" || !Array.isArray(message.parts)) continue;
+    const first = message.parts.findIndex((part) => part?.type === "text");
+    const kept = message.parts.filter((part, index) => {
+      const time = index > first && part?.type === "text" && typeof part.text === "string" && part.text.startsWith(deliveryEnvelope)
+        ? pullTime(part.id, message.info.time?.created, now) : undefined;
+      if (time === undefined) return true;
+      moved.push({ time, origin: message, entry: { info: { ...message.info, id: `msg_${part.id.slice(4)}`, time: { ...message.info.time, created: time } }, parts: [part] } });
+      return false;
+    });
+    if (kept.length !== message.parts.length) message.parts = kept;
+  }
+  moved.sort((a, b) => a.time - b.time);
+  for (const { time, origin, entry } of moved) {
+    // Never before the message it was stored on (a compacted history can place
+    // a later-completed summary ahead of it).
+    const from = messages.indexOf(origin) + 1;
+    const at = messages.findIndex((message, index) => index >= from && message?.info?.role === "assistant" && !(message.info.time?.completed <= time));
+    messages.splice(at < 0 ? messages.length : at, 0, entry);
+  }
 }
 
 export class NativeDelivery {

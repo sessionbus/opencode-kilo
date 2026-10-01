@@ -6,7 +6,7 @@ import { launchEnvironment, interactiveActivation } from "./activation.mjs";
 import { ReadyGate } from "./gate.mjs";
 import { waitForEndpoint } from "./readiness.mjs";
 import { SessionbusForwarder, bridgeLimits } from "./forward.mjs";
-import { nextPartID } from "./delivery.mjs";
+import { nextPartID, placeHandoffs } from "./delivery.mjs";
 
 export function createServer(environment = launchEnvironment) {
   let instances = 0, calls = 0;
@@ -62,7 +62,16 @@ export function createServer(environment = launchEnvironment) {
       event: async ({ event }) => {
         if (event?.type === "session.deleted") latest.delete(event.properties?.info?.id);
       },
-      "experimental.chat.messages.transform": async (_input, output) => {
+      "experimental.chat.messages.transform": async (input, output) => {
+        await handOff(input, output);
+        // Only a call that carries the newest prompt; a head without it (such as a
+        // compaction head) is left as it is.
+        const messages = Array.isArray(output?.messages) ? output.messages : [];
+        if (!messages.some((message) => message?.info?.role === "user" && latest.get(message.info.sessionID) === message.info.id)) return;
+        try { placeHandoffs(messages); } catch (error) { console.error(`sessionbus: ${error?.message || error}`); }
+      },
+    };
+    async function handOff(_input, output) {
         try {
           const messages = Array.isArray(output?.messages) ? output.messages : [];
           const prompt = messages.findLastIndex((message) => message?.info?.role === "user" && latest.get(message.info.sessionID) === message.info.id);
@@ -81,8 +90,7 @@ export function createServer(environment = launchEnvironment) {
             if (part?.type === "text" && typeof part.text === "string" && part.sessionID === sessionID && part.messageID === user.info.id && typeof part.id === "string" && part.id > after) user.parts.push(part);
           }
         } catch (error) { console.error(`sessionbus: ${error?.message || error}`); }
-      },
-    };
+    }
     // Constructor never waits for TUI listen/initialize or calls native HTTP:
     // quiet resume validation may need this server before TUI plugins start.
     return {
