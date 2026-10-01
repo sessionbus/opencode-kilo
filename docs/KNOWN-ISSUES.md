@@ -67,13 +67,24 @@ A second `kilo-peer` launch takes over the same Sessionbus identity.
   - Nothing says that another launch took the session over or that a relaunch is needed.
 
   Evidence: RESULTS-KILO-A6-DISPLACED.md.
+- **Accepted limit (PR #19):**
+  - each session displaced in a TUI keeps one of that TUI's 128 owner slots until the session is deleted natively or the TUI exits;
+  - a new distinct session beyond the allowance is refused with "Sessionbus native owner limit reached";
+  - nothing grows per event.
 
 ## 4. Socket file left after a lane worker is killed (OpenCode and Kilo lanes)
 
 After SIGKILL of a lane worker, its lane tool socket under
-`$XDG_RUNTIME_DIR/sessionbus/lanes/` remains until the daemon restarts. Only the
-worker's Close removes it, and the daemon sweeps that directory only at startup.
-Evidence: RESULTS-S5-LANES.md (A2), RESULTS-LANES-KILO.md.
+`$XDG_RUNTIME_DIR/sessionbus/lanes/` remains.
+- **Why:**
+  - the worker's own cleanup runs in Close, which SIGKILL skips;
+  - every lane start uses a new random name, so a resume never reuses or clears the old one;
+  - resume, close and forget did not remove it.
+- **Clearing:** it was observed cleared at the next daemon start. The daemon's sweep of sockets it cannot connect to runs at its startup, before its presence listener.
+- **Effect:** the file is a socket with no listener and mode `0600`. No later lane collides with it.
+- **Not changed here:** the proper owner of this cleanup is the daemon's lane finish, which is core.
+
+Evidence: RESULTS-S5-LANES.md (A2 and its precision), RESULTS-LANES-KILO.md (A2 RCA), LANE-SOCKET-NOTE-1.md.
 
 ## 5. OpenCode interactive: topology flags are not refused
 
@@ -126,10 +137,11 @@ Evidence: RESULTS-S4-KILO.md (A8b); RESULTS-I1-C.md (OpenCode).
 - **Kilo plugin off and on in the native plugin manager:**
   - toggling `@sessionbus/kilo` off removes the session's row;
   - toggling it back on leaves the plugin `inactive`, because the launch's claim refuses a second start in the same launch;
-  - Sessionbus then stays unavailable in that TUI until relaunch;
-  - no second session is created.
+  - Sessionbus then stays unavailable in that TUI, and relaunching restores it;
+  - no second session is created;
+  - Kilo persists the off setting, so the plugin also stays off in later launches until it is turned on again (native Kilo 7.8.1 source, not run live).
 
-  Evidence: RESULTS-KILO-FRESH-TUI.md (check 3).
+  Evidence: RESULTS-KILO-FRESH-TUI.md (check 3), KILO-PLUGIN-TOGGLE-NOTE-1.md.
 
 ## 11. Not run or not established
 
