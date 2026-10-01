@@ -10,11 +10,12 @@ const message = { message_id: "m1", body: "hello", from: { session_id: "sender@h
 
 // Fake native server ctx: records registrations and prompts.
 function serverContext(t, prompt = async () => ({})) {
-  const ctx = { location: { directory: "/work" }, prompts: [] };
+  const ctx = { location: { directory: "/work" }, prompts: [], updates: [] };
   ctx.rpc = { register: async (_contract, handlers) => { ctx.handlers = handlers; return { dispose: async () => {} }; } };
   ctx.session = {
     get: async ({ sessionID }) => ({ id: sessionID, title: "native title" }),
     prompt: async (input) => { ctx.prompts.push(input); return prompt(input); },
+    update: async (input) => { ctx.updates.push(input); },
     hook: async (name, callback) => { ctx.hooks = { ...ctx.hooks, [name]: callback }; return { dispose: async () => {} }; },
   };
   ctx.tool = { transform: async (callback) => { callback({ add: (tool) => { ctx.tool.added = tool; } }); return { dispose: async () => {} }; } };
@@ -67,14 +68,19 @@ test("server: activate is idempotent, names the peer and delivers as one native 
 test("server: concurrent activations of one session create one Peer", async (t) => {
   const { peers, peer } = fakePeers();
   const ctx = serverContext(t);
-  const held = [];
+  const held = [], granting = [];
   ctx.session.get = ({ sessionID }) => new Promise((resolve) => held.push(() => resolve({ id: sessionID, title: "native title" })));
+  // The grant is the last await before the Peer is created.
+  ctx.session.update = (input) => new Promise((resolve) => granting.push(() => { ctx.updates.push(input); resolve(); }));
   const cleanup = await createServer({ peer })(ctx);
   const first = ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] });
   const second = ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] });
   for (let i = 0; i < 5 && held.length < 2; i++) await flush();
   assert.equal(held.length, 2);
   for (const release of held) release();
+  for (let i = 0; i < 5 && granting.length < 2; i++) await flush();
+  assert.equal(granting.length, 2);
+  for (const release of granting) release();
   await Promise.all([first, second]);
   assert.equal(peers.length, 1);
   await cleanup();
@@ -169,6 +175,35 @@ test("server: a Task child with no session.created (native reuse) attaches at it
   assert.deepEqual(Object.keys(failing.tools), []);
   await cleanup();
   assert.ok(peers.every((value) => value.disposed));
+});
+
+test("server: an activated session keeps the Sessionbus tool through one last allow rule; sub-agents get none", async (t) => {
+  const { peers, peer } = fakePeers();
+  const ctx = serverContext(t);
+  const grant = { action: "sessionbus", resource: "*", effect: "allow" };
+  const deny = { action: "sessionbus", resource: "*", effect: "deny" };
+  const ask = { action: "shell", resource: "*", effect: "ask" };
+  const rules = { ses_deny: [deny, ask], ses_granted: [ask, grant], ses_buried: [grant, deny], ses_child: [deny], ses_reused: [deny] };
+  const parents = { ses_child: "ses_deny", ses_reused: "ses_deny" };
+  ctx.session.get = async ({ sessionID }) => ({ id: sessionID, title: "native title", parentID: parents[sessionID], permissions: rules[sessionID] });
+  const cleanup = await createServer({ peer })(ctx);
+  for (const sessionID of ["ses_deny", "ses_granted", "ses_buried", "ses_none"]) await ctx.handlers.activate({ sessionID, socket: "/bus.sock", groups: ["team"] });
+  assert.deepEqual(ctx.updates, [
+    { sessionID: "ses_deny", permissions: [deny, ask, grant] },
+    { sessionID: "ses_buried", permissions: [grant, deny, grant] },
+    { sessionID: "ses_none", permissions: [grant] },
+  ]);
+  // Native sub-agents are attached best effort, without a rule of their own.
+  ctx.publish({ type: "session.created", data: { sessionID: "ses_child", parentID: "ses_deny" } });
+  for (let i = 0; i < 10 && peers.length < 5; i++) await flush();
+  await ctx.hooks.context({ sessionID: "ses_reused", tools: { sessionbus: {} } });
+  assert.deepEqual(peers.map((value) => value.identity.session_id), ["ses_deny", "ses_granted", "ses_buried", "ses_none", "ses_child", "ses_reused"]);
+  assert.equal(ctx.updates.length, 3);
+  // An activation that cannot be granted is not attached: no Peer without its tool.
+  ctx.session.update = async () => { throw new Error("update failed"); };
+  await assert.rejects(ctx.handlers.activate({ sessionID: "ses_failed", socket: "/bus.sock", groups: ["team"] }), /update failed/u);
+  assert.equal(peers.length, 6);
+  await cleanup();
 });
 
 test("server: a native rename says hello again under the new title; invalid titles keep the old name", async (t) => {

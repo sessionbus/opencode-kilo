@@ -10,16 +10,32 @@ import { OwnedPeer } from "./peer.mjs";
 // directory its cleanup closes them, and a TUI still showing the session
 // activates it again. Delivery is one native steer prompt: native admits it to
 // the session inbox, wakes an idle session, and hands it to a busy one at its
-// next model step.
+// next model step. Native sub-agent (Task) sessions are attached best effort
+// (owner, 2026-10-01); a helper that needs guaranteed communications is a lane.
+//
+// A session a managed TUI activated always keeps the Sessionbus tool (owner,
+// 2026-09-19: no communications opt-out): one session permission rule allows
+// only this tool. Native evaluates agent rules, then session rules, and the
+// last match wins, so the rule overrides a config or agent deny; every other
+// rule is kept. Sub-agents get no such rule.
+const grant = { action: "sessionbus", resource: "*", effect: "allow" };
+
 export function createServer(dependencies = {}) {
   const connect = dependencies.peer || ((identity, deliver, env) => new OwnedPeer(identity, deliver, env));
   return async function setup(ctx) {
     // sessionID -> { peer, socket, groups } for this instance only.
     const peers = new Map();
     const report = (error) => console.error(`sessionbus: ${error?.message || error}`);
-    const attach = async (sessionID, binding) => {
+    const attach = async (sessionID, binding, granted = false) => {
       const session = await ctx.session.get({ sessionID });
-      // Native does not serialize handlers: a concurrent attach may have won.
+      const rules = session?.permissions ?? [];
+      const last = rules.at(-1);
+      if (granted && (last?.action !== grant.action || last.resource !== grant.resource || last.effect !== grant.effect)) {
+        // Without it an activated session would be on the bus without its tool.
+        await ctx.session.update({ sessionID, permissions: [...rules, grant] });
+      }
+      // Native does not serialize handlers: a concurrent attach may have won
+      // during the awaits above.
       if (peers.has(sessionID)) return;
       const identity = hello(sessionID, binding, session, ctx.location.directory);
       const peer = connect(identity, async (_signal, message) => {
@@ -39,7 +55,7 @@ export function createServer(dependencies = {}) {
     await ctx.rpc.register(contract, {
       activate: async (input) => {
         // Idempotent: the TUI activates again after reconnects and unloads.
-        if (!peers.has(input.sessionID)) await attach(input.sessionID, input);
+        if (!peers.has(input.sessionID)) await attach(input.sessionID, input, true);
         return {};
       },
     });
