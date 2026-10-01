@@ -98,6 +98,22 @@ test("server: a failed native prompt is an uncertain outcome at the bus, never a
   await cleanup();
 });
 
+test("server: a native Task child acts for its activated ancestor; unrelated sessions do not", async (t) => {
+  const { peers, peer } = fakePeers();
+  const ctx = serverContext(t);
+  const parents = { ses_child: "ses_a", ses_grandchild: "ses_child", ses_orphan: undefined };
+  ctx.session.get = async ({ sessionID }) => ({ id: sessionID, title: "native title", parentID: parents[sessionID] });
+  await createServer({ peer })(ctx);
+  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] });
+  assert.deepEqual(await ctx.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_grandchild" }), { content: '{"ok":true}' });
+  assert.deepEqual(peers[0].actions, [["list", {}]]);
+  await assert.rejects(ctx.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_orphan" }), /not active/u);
+  const child = { sessionID: "ses_child", tools: { sessionbus: {} } }, orphan = { sessionID: "ses_orphan", tools: { sessionbus: {} } };
+  await ctx.hooks.context(child); await ctx.hooks.context(orphan);
+  assert.deepEqual(Object.keys(child.tools), ["sessionbus"]); assert.deepEqual(Object.keys(orphan.tools), []);
+  assert.equal(peers.length, 1);
+});
+
 test("server: a natively deleted session leaves the bus; others stay", async (t) => {
   const { peers, peer } = fakePeers();
   const ctx = serverContext(t);
@@ -125,7 +141,7 @@ test("server: the tool serves only activated sessions, which alone see it", asyn
   assert.deepEqual(peers[0].actions, [["list", {}]]);
   await assert.rejects(tool.execute({ action: "list" }, { sessionID: "ses_a" }), /action and arguments/u);
   const shown = { sessionID: "ses_a", tools: { sessionbus: {}, bash: {} } }, hidden = { sessionID: "ses_x", tools: { sessionbus: {}, bash: {} } };
-  ctx.hooks.context(shown); ctx.hooks.context(hidden);
+  await ctx.hooks.context(shown); await ctx.hooks.context(hidden);
   assert.deepEqual(Object.keys(shown.tools), ["sessionbus", "bash"]);
   assert.deepEqual(Object.keys(hidden.tools), ["bash"]);
 });

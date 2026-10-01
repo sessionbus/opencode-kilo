@@ -15,6 +15,15 @@ export function createServer(dependencies = {}) {
   const connect = dependencies.peer || ((identity, deliver, env) => new OwnedPeer(identity, deliver, env));
   return async function setup(ctx) {
     const peers = new Map();
+    // A native Task child acts for the activated session it descends from.
+    const owner = async (sessionID) => {
+      for (let id = sessionID, depth = 0; id && depth < 16; depth++) {
+        const peer = peers.get(id);
+        if (peer) return peer;
+        id = (await ctx.session.get({ sessionID: id }).catch(() => undefined))?.parentID;
+      }
+      return undefined;
+    };
     await ctx.rpc.register(contract, {
       activate: async (input) => {
         // Idempotent: the TUI activates again after reconnects and unloads.
@@ -45,15 +54,15 @@ export function createServer(dependencies = {}) {
       input: declaration.inputSchema,
       options: { codemode: false },
       execute: async (input, context) => {
-        const peer = peers.get(context.sessionID);
+        const peer = await owner(context.sessionID);
         if (!peer) throw new Error("Sessionbus is not active for this OpenCode session");
         if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length !== 2 || !Object.hasOwn(input, "action") || !Object.hasOwn(input, "arguments")) throw new Error("expected Sessionbus action and arguments");
         return { content: JSON.stringify(await peer.action(input.action, input.arguments, context.signal)) };
       },
     }));
-    // Only activated sessions see the tool.
-    await ctx.session.hook("context", (request) => {
-      if (!peers.has(request.sessionID)) delete request.tools.sessionbus;
+    // Only activated sessions and their Task children see the tool.
+    await ctx.session.hook("context", async (request) => {
+      if (!(await owner(request.sessionID))) delete request.tools.sessionbus;
     });
     // A deleted native session leaves the bus.
     const events = new AbortController();
