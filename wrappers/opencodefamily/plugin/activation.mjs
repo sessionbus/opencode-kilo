@@ -13,7 +13,7 @@ export async function interactiveActivation(environment, parent = process.ppid) 
   if (!raw) return null;
   if (typeof raw !== "string" || Buffer.byteLength(raw) > 64*1024) throw new Error(`invalid managed ${nativeProduct.label} launch metadata`);
   const launch = JSON.parse(raw);
-  if (!launch || typeof launch !== "object" || Array.isArray(launch) || Object.keys(launch).length !== 5 || !Number.isSafeInteger(launch.pid) || launch.pid <= 1 || typeof launch.directory !== "string" || !path.isAbsolute(launch.directory) || typeof launch.socket !== "string" || !path.isAbsolute(launch.socket) || typeof launch.name !== "string" || !Array.isArray(launch.groups) || launch.groups.some((value) => typeof value !== "string" || !value.length) || new Set(launch.groups).size !== launch.groups.length) throw new Error(`invalid managed ${nativeProduct.label} launch metadata`);
+  if (!launch || typeof launch !== "object" || Array.isArray(launch) || Object.keys(launch).length !== (Object.hasOwn(launch, "create") ? 6 : 5) || (Object.hasOwn(launch, "create") && launch.create !== true) || !Number.isSafeInteger(launch.pid) || launch.pid <= 1 || typeof launch.directory !== "string" || !path.isAbsolute(launch.directory) || typeof launch.socket !== "string" || !path.isAbsolute(launch.socket) || typeof launch.name !== "string" || !Array.isArray(launch.groups) || launch.groups.some((value) => typeof value !== "string" || !value.length) || new Set(launch.groups).size !== launch.groups.length) throw new Error(`invalid managed ${nativeProduct.label} launch metadata`);
   // An inherited marker in a nested native invocation is not activation. This
   // deliberately supports the direct native executable, not a guessed shim tree.
   if (launch.pid !== parent) return null;

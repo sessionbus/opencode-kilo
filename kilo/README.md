@@ -44,6 +44,10 @@ kilo-peer --resume ses_exact_native_id
 kilo-peer --yolo --resume ses_exact_native_id
 ```
 
+A launch that selects no session (no `-s`/`--session`, `-c`/`--continue` or
+`--prompt`) creates its native session at once, titled with `-n` when given, so
+peers can reach it before anything is typed; that session stays in Kilo's
+session list even if nothing is typed, as with opencode-peer.
 `--resume ID` and `--resume=ID` map to native `-s ID`. Native `--yolo` passes
 through unchanged and therefore changes permissions only when explicitly supplied.
 Native value arguments and the literal `--` boundary retain their meaning.

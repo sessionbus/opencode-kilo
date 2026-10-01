@@ -100,7 +100,8 @@ func TestCompiledKiloLauncherDirectLifetimeAndNativeResources(t *testing.T) {
 			if report.CWD != canonicalBin || !slices.Equal(report.Args, []string{"--hostname=127.0.0.1", "--port=0", "--yolo", "-s", "ses_resume"}) {
 				t.Fatalf("argv/cwd changed: %+v", report)
 			}
-			if !slices.Equal(report.Launch.Groups, []string{"one", "two"}) || report.Launch.Name != "initial" {
+			// -s (from --resume) selects a session, so the TUI is not asked to create one.
+			if !slices.Equal(report.Launch.Groups, []string{"one", "two"}) || report.Launch.Name != "initial" || report.Launch.Create {
 				t.Fatal(report.Launch)
 			}
 			if report.Launch.Directory == previous {
