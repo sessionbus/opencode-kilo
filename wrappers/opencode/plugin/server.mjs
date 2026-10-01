@@ -32,6 +32,9 @@ const daemonName = (name) => typeof name === "string" && !/\p{Zs}/u.test(name.re
 
 export function createServer(dependencies = {}) {
   const connect = dependencies.peer || ((identity, deliver, env) => new OwnedPeer(identity, deliver, env));
+  // How long activation waits for the bus to admit the session: a few of the
+  // kit's 2 s reconnect intervals. The Peer keeps reconnecting after that.
+  const admissionWait = dependencies.admissionWait ?? 10_000;
   return async function setup(ctx) {
     // sessionID -> { peer } for this instance only.
     const peers = new Map();
@@ -78,6 +81,18 @@ export function createServer(dependencies = {}) {
       activate: async (input) => {
         // Idempotent: the TUI activates again after reconnects and unloads.
         await attach(input.sessionID, input);
+        // Activation reports success only once the bus has admitted the
+        // session; otherwise the TUI shows why. A refused Peer reports its
+        // refusal, and an unreachable daemon keeps being retried.
+        const entry = peers.get(input.sessionID);
+        if (entry) {
+          try {
+            await entry.peer.ready(AbortSignal.timeout(admissionWait));
+          } catch (error) {
+            if (error?.name === "TimeoutError") throw new Error("the bus has not admitted this session yet; still connecting");
+            throw error;
+          }
+        }
         return {};
       },
     });

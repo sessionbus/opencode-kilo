@@ -40,6 +40,8 @@ function fakePeers() {
     value.dispose = async () => { value.disposed = true; controller.abort(); };
     value.renames = [];
     value.rehello = async (name, info) => { value.renames.push([name, info]); };
+    // Admitted at once unless a test holds or refuses it.
+    value.ready = (signal) => value.admission ? value.admission(signal) : Promise.resolve();
     peers.push(value);
     return value;
   };
@@ -89,6 +91,34 @@ test("server: concurrent activations of one session create one Peer", async (t) 
 
 // Through the pinned kit's own message.deliver mapping: a failed native prompt
 // may already be admitted, so the bus gets an uncertain error, not a refusal.
+test("server: activation succeeds only once the bus admits the session; otherwise it says why and keeps the Peer", async (t) => {
+  const { peers, peer } = fakePeers();
+  const ctx = serverContext(t);
+  let admit, refuse;
+  const held = (value) => { value.admission = (signal) => new Promise((resolve, reject) => {
+    admit = resolve; refuse = reject; signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+  }); };
+  const cleanup = await createServer({ peer: (...args) => { const value = peer(...args); held(value); return value; }, admissionWait: 30 })(ctx);
+  // Admitted within the wait: activation succeeds.
+  const first = ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] });
+  await flush(); admit(); await first;
+  // Unreachable bus: activation reports it; the Peer stays and keeps trying.
+  await assert.rejects(ctx.handlers.activate({ sessionID: "ses_b", socket: "/absent.sock", groups: ["team"] }), /not admitted this session yet; still connecting/u);
+  assert.equal(peers.length, 2); assert.equal(peers[1].disposed, false);
+  // A later activation of the same session waits again on the same Peer.
+  const again = ctx.handlers.activate({ sessionID: "ses_b", socket: "/absent.sock", groups: ["team"] });
+  await flush(); admit(); await again;
+  assert.equal(peers.length, 2);
+  // A permanent refusal is reported as itself.
+  const third = ctx.handlers.activate({ sessionID: "ses_c", socket: "/bus.sock", groups: ["team"] });
+  await flush(); refuse(new Error("invalid_hello")); await assert.rejects(third, /invalid_hello/u);
+  // A sub-agent shown by a managed TUI attaches nothing and waits for nothing.
+  ctx.session.get = async ({ sessionID }) => ({ id: sessionID, title: "child", parentID: "ses_a" });
+  await ctx.handlers.activate({ sessionID: "ses_child", socket: "/bus.sock", groups: ["team"] });
+  assert.equal(peers.length, 3);
+  await cleanup();
+});
+
 test("server: a failed native prompt is an uncertain outcome at the bus, never a refusal or a retry", async (t) => {
   const { peers, peer } = fakePeers();
   const ctx = serverContext(t, async () => { throw new Error("instance closing"); });
