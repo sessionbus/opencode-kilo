@@ -65,6 +65,16 @@ export function createTui(environment = launchEnvironment, dependencies = {}) {
           void selection.then(() => selections.delete(id), (error) => { selections.delete(id); report(error); });
         });
       });
+      // A launch that selects no session gets one at once, titled with its
+      // name, so peers can reach it before anything is typed; showing it
+      // selects it like any other. The claim above makes this once per launch.
+      if (launch.create && api.route.current?.name !== "session") {
+        try {
+          const created = await api.client.session.create(launch.name ? { title: launch.name } : {}, { signal: lifetime.signal, throwOnError: true, redirect: "error" });
+          check();
+          api.route.navigate("session", { sessionID: created.data.id });
+        } catch (error) { if (!lifetime.signal.aborted) report(error); }
+      }
     })();
     try { await starting; }
     catch (error) { await dispose(); throw error; }

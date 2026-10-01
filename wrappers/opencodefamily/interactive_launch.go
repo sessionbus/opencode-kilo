@@ -32,6 +32,9 @@ type InteractiveLaunchBinding struct {
 	Socket    string   `json:"socket"`
 	Name      string   `json:"name"`
 	Groups    []string `json:"groups"`
+	// Create asks the TUI plugin for a session of its own: the launch selects
+	// none, so it would otherwise wait unreachable on home.
+	Create bool `json:"create,omitempty"`
 }
 
 // RunKiloInteractive requires the caller's already resolved direct executable
@@ -74,7 +77,7 @@ func runInteractive(ctx context.Context, plan host.ExecPlan, product interactive
 	if err = json.Unmarshal([]byte(InteractiveEnvironmentValue(plan.Env, host.GroupsEnv)), &groups); err != nil {
 		return err
 	}
-	binding, err := json.Marshal(InteractiveLaunchBinding{Directory: directory, PID: os.Getpid(), Socket: socket, Name: InteractiveEnvironmentValue(plan.Env, host.NameEnv), Groups: groups})
+	binding, err := json.Marshal(InteractiveLaunchBinding{Directory: directory, PID: os.Getpid(), Socket: socket, Name: InteractiveEnvironmentValue(plan.Env, host.NameEnv), Groups: groups, Create: !SelectsSession(plan.Args)})
 	if err != nil {
 		return err
 	}

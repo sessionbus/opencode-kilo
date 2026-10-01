@@ -137,3 +137,21 @@ func NormalizeInteractiveIdentity(environment []string) ([]string, error) {
 	encoded, _ := json.Marshal(groups)
 	return setInteractiveEnvironment(environment, host.GroupsEnv, string(encoded)), nil
 }
+
+// SelectsSession reports whether native argv already opens or submits to a
+// session: --prompt, -s/--session or -c/--continue, before the literal "--".
+// OpenCode and Kilo share these flags; a launch that selects none asks its TUI
+// plugin to create one.
+func SelectsSession(arguments []string) bool {
+	for _, argument := range arguments {
+		if argument == "--" {
+			return false
+		}
+		name, _, _ := strings.Cut(argument, "=")
+		switch name {
+		case "--prompt", "-s", "--session", "-c", "--continue":
+			return true
+		}
+	}
+	return false
+}

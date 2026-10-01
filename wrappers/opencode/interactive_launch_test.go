@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sessionbus/opencode-kilo/wrappers/opencodefamily"
 	"github.com/sessionbus/peer-common/testsocket"
 )
 
@@ -110,7 +111,7 @@ func TestLaunchCreatesSessionOnlyWhenNoneIsSelected(t *testing.T) {
 		{[]string{"--continue"}, false},
 		{[]string{"--", "--prompt", "literal"}, true},
 	} {
-		if got := !selectsSession(tc.args); got != tc.create {
+		if got := !opencodefamily.SelectsSession(tc.args); got != tc.create {
 			t.Fatalf("%v: create=%v, want %v", tc.args, got, tc.create)
 		}
 	}

@@ -46,7 +46,7 @@ func ExecInteractive(plan host.ExecPlan) error {
 	if value(host.LocalKeyEnv) != "" {
 		return errors.New("local key transport is not supported")
 	}
-	binding := launchBinding{PID: os.Getpid(), Socket: value(host.SocketEnv), Name: value(host.NameEnv), Create: !selectsSession(plan.Args)}
+	binding := launchBinding{PID: os.Getpid(), Socket: value(host.SocketEnv), Name: value(host.NameEnv), Create: !opencodefamily.SelectsSession(plan.Args)}
 	if err := json.Unmarshal([]byte(value(host.GroupsEnv)), &binding.Groups); err != nil {
 		return err
 	}
@@ -57,20 +57,4 @@ func ExecInteractive(plan host.ExecPlan) error {
 	environment := slices.DeleteFunc(slices.Clone(plan.Env), func(entry string) bool { return strings.HasPrefix(entry, "SESSIONBUS_") })
 	environment = append(environment, LaunchEnv+"="+string(encoded))
 	return syscall.Exec(path, append([]string{path}, plan.Args...), environment)
-}
-
-// selectsSession reports whether native argv already opens or submits to a
-// session: --prompt, -s/--session or -c/--continue, before the literal "--".
-func selectsSession(arguments []string) bool {
-	for _, argument := range arguments {
-		if argument == "--" {
-			return false
-		}
-		name, _, _ := strings.Cut(argument, "=")
-		switch name {
-		case "--prompt", "-s", "--session", "-c", "--continue":
-			return true
-		}
-	}
-	return false
 }
