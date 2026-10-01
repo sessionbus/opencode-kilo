@@ -70,7 +70,7 @@ export function createTui(environment = launchEnvironment, dependencies = {}) {
       // selects it like any other. The claim above makes this once per launch.
       if (launch.create && api.route.current?.name !== "session") {
         try {
-          const created = await api.client.session.create(launch.name ? { title: launch.name } : {}, { throwOnError: true, redirect: "error" });
+          const created = await api.client.session.create(launch.name ? { title: launch.name } : {}, { signal: lifetime.signal, throwOnError: true, redirect: "error" });
           check();
           api.route.navigate("session", { sessionID: created.data.id });
         } catch (error) { if (!lifetime.signal.aborted) report(error); }

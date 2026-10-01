@@ -15,6 +15,7 @@ async function fixture(t) {
   const binding = { directory, pid: process.ppid, socket: directory + "/bus", name: "first", groups: ["one", "two"] };
   const events = new EventEmitter(), life = new AbortController(), disposals = new Set();
   const sockets = new Set(), hellos = [], updates = [], creates = [];
+  let stallCreate = false;
   const server = net.createServer((stream) => {
     sockets.add(stream); stream.once("close", () => sockets.delete(stream));
     const wire = new Connection(stream, false, (request) => {
@@ -33,12 +34,17 @@ async function fixture(t) {
       async get({ sessionID }) { return { response: { status: 200 }, data: { id: sessionID, title: "", directory: "/native" } }; },
       async status() { return { response: { status: 200 }, data: {} }; },
       async update(params) { updates.push(params); return { response: { status: 200 }, data: { id: params.sessionID, title: params.title, directory: "/native" } }; },
-      async create(params) { creates.push(params); return { response: { status: 200 }, data: { id: "ses_created", title: params.title || "", directory: "/native" } }; },
+      async create(params, options) {
+        creates.push(params);
+        // A stalled request ends only through its abort signal, if it has one.
+        if (stallCreate) await new Promise((_, reject) => options?.signal?.addEventListener("abort", () => reject(options.signal.reason), { once: true }));
+        return { response: { status: 200 }, data: { id: "ses_created", title: params.title || "", directory: "/native" } };
+      },
     } },
   };
   const close = async () => { life.abort(); await Promise.all([...disposals].map((callback) => callback())); };
   t.after(async () => { await close(); for (const socket of sockets) socket.destroy(); await new Promise((resolve) => server.close(resolve)); await rm(directory, { recursive: true, force: true }); });
-  return { directory, binding, api, solid, hellos, updates, creates, close, rootDisposed: () => disposedRoot, route(id) { api.route.current = { name: "session", params: { sessionID: id } }; effect(); } };
+  return { directory, binding, api, solid, hellos, updates, creates, close, stall() { stallCreate = true; }, rootDisposed: () => disposedRoot, route(id) { api.route.current = { name: "session", params: { sessionID: id } }; effect(); } };
 }
 
 test("ordinary TUI is inert before loading host reactivity or creating resources", async (t) => {
@@ -92,4 +98,14 @@ test("overlapping TUI initialization cannot transfer a claimed launch", { timeou
   assert.equal(outcomes.filter((value) => value.status === "rejected" && value.reason.code === "EEXIST").length, 1);
   await f.close();
   await assert.rejects(start(f.api), /disposed|aborted|EEXIST/i);
+});
+
+test("a stalled launch create is cancelled by plugin disposal; the TUI stays on home", { timeout: 5000 }, async (t) => {
+  const f = await fixture(t);
+  f.stall();
+  const started = createTui({ [nativeProduct.launchEnv]: JSON.stringify({ ...f.binding, create: true }) }, { solid: f.solid })(f.api);
+  while (!f.creates.length) await new Promise((resolve) => setTimeout(resolve, 5));
+  await f.close();
+  await started;
+  assert.deepEqual(f.api.route.current, { name: "home" });
 });
