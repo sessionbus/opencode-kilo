@@ -37,6 +37,8 @@ function fakePeers() {
     const value = { identity, deliver, env, disposed: false, actions: [], signal: controller.signal };
     value.action = async (action, args) => { value.actions.push([action, args]); return { ok: true }; };
     value.dispose = async () => { value.disposed = true; controller.abort(); };
+    value.renames = [];
+    value.rehello = async (name, info) => { value.renames.push([name, info]); };
     peers.push(value);
     return value;
   };
@@ -112,6 +114,20 @@ test("server: a native Task child acts for its activated ancestor; unrelated ses
   await ctx.hooks.context(child); await ctx.hooks.context(orphan);
   assert.deepEqual(Object.keys(child.tools), ["sessionbus"]); assert.deepEqual(Object.keys(orphan.tools), []);
   assert.equal(peers.length, 1);
+});
+
+test("server: a native rename says hello again under the new title; invalid titles keep the old name", async (t) => {
+  const { peers, peer } = fakePeers();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer })(ctx);
+  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] });
+  ctx.publish({ type: "session.renamed", data: { sessionID: "ses_other", title: "elsewhere" } });
+  ctx.publish({ type: "session.renamed", data: { sessionID: "ses_a", title: "renamed worker" } });
+  ctx.publish({ type: "session.renamed", data: { sessionID: "ses_a", title: "x".repeat(300) } });
+  for (let i = 0; i < 5 && !peers[0].renames.length; i++) await flush();
+  await flush();
+  assert.deepEqual(peers[0].renames, [["renamed worker", { cwd: "/work" }]]);
+  await cleanup();
 });
 
 test("server: a natively deleted session leaves the bus; others stay", async (t) => {

@@ -64,11 +64,16 @@ export function createServer(dependencies = {}) {
     await ctx.session.hook("context", async (request) => {
       if (!(await owner(request.sessionID))) delete request.tools.sessionbus;
     });
-    // A deleted native session leaves the bus.
+    // A deleted native session leaves the bus; a renamed one says hello again
+    // under its new title (a title outside the bus name grammar keeps the old).
     const events = new AbortController();
     void (async () => {
       for await (const event of ctx.event.subscribe({ signal: events.signal })) {
         if (event?.type === "session.deleted") void peers.get(event.data?.sessionID)?.dispose();
+        const renamed = event?.type === "session.renamed" ? peers.get(event.data?.sessionID) : undefined;
+        if (renamed && validate("SessionHelloRequest", { protocol: 1, product: "opencode-peer", session_id: event.data.sessionID, groups: [], info: { cwd: ctx.location.directory }, name: event.data.title })) {
+          void renamed.rehello(event.data.title, { cwd: ctx.location.directory }).catch((error) => console.error(`sessionbus: ${error?.message || error}`));
+        }
       }
     })().catch((error) => { if (!events.signal.aborted) console.error(`sessionbus: ${error?.message || error}`); });
     // Closes only this instance's Peers; a newer instance's hello supersedes.
