@@ -2,9 +2,10 @@
 
 `kilo-peer` supplies managed interactive and lane entry points from one permanent
 installation. Native server/TUI hooks run inside Kilo's existing Bun runtime.
-The wrapper adds no Node runtime or separate interactive broker. Source behavior
-is bound to Kilo 7.6.2. Installed Linux results and the limits
-are recorded in [ACCEPTANCE.md](../docs/designs/kilo-0.5.0/ACCEPTANCE.md).
+The wrapper adds no Node runtime or separate interactive broker. This build is
+tested on Linux with Kilo 7.8.1; earlier installed 7.6.2 results and their limits
+are recorded in [ACCEPTANCE.md](../docs/designs/kilo-0.5.0/ACCEPTANCE.md). Known
+behaviour deferred for later work is listed in [KNOWN-ISSUES.md](../docs/KNOWN-ISSUES.md).
 
 ## Build and install
 
@@ -65,8 +66,10 @@ session/message context. Navigation does not evict prior owners. Native deletion
 or TUI disposal withdraws them. The initial name belongs only to the first route
 selection, with native title confirmation; later titles remain native-owned.
 
-Interactive inbound messages wait while native work, questions or permissions are
-pending. Initial native blocker snapshots and live events are checked for the
+An interactive inbound message to a busy session is appended to the user message
+of the running task before its next model step (receipt `queued_for_next_turn`).
+Inbound messages wait while native questions or permissions are pending.
+Initial native blocker snapshots and live events are checked for the
 exact session. The wrapper never answers or rejects an interactive blocker. An
 idle handoff uses native `prompt_async` without inventing a message ID. A new
 blocker can cross the final check and native submission; the API supplies no
@@ -94,10 +97,13 @@ for the cell scope, earlier FAILs and the observed update notice.
 Public spawn selects product `kilo-peer`. One Worker Caller owns lane capability;
 native child tools must prove the adopted session or native parent ancestry.
 A Run uses the legacy synchronous native message request, reconciles native
-assistant history, and has no wrapper silence deadline. Every lane delivery is
-refused before native submission; the daemon starts or schedules an automatic
-managed Run carrying the original message. `queued_for_next_turn` is bounded
-daemon scheduling, not native admission. Interactive and lane
+assistant history, and has no wrapper silence deadline. A delivery during an
+active Run joins that Run (receipt `injected`): before each model call the plugin
+writes it as a text part of the user message that call answers, or the Run sends
+it as one more message before it ends. A delivery to an idle lane, or after the
+Run's final check, is refused before native submission; the daemon starts or
+schedules an automatic managed Run carrying the original message.
+`queued_for_next_turn` is bounded daemon scheduling, not native admission. Interactive and lane
 permission behavior differs: unattended lane questions/permissions are rejected
 under the selected lane contract. Omitted or `default` permission mode inherits
 native policy. Explicit `permission_mode=bypassPermissions` supplies the native
