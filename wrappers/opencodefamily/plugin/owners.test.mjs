@@ -54,7 +54,8 @@ async function fixture(t, options = {}) {
       assert.equal(config.throwOnError, true); assert.equal(config.redirect, "error");
       return options.promptAsync(params, config);
     },
-  }, permission: { list: (params, config) => options.permission ? options.permission(params, config) : result([]) },
+  }, part: { update: (params, config) => options.partUpdate ? options.partUpdate(params, config) : result(params.part) },
+    permission: { list: (params, config) => options.permission ? options.permission(params, config) : result([]) },
     question: { list: (params, config) => options.question ? options.question(params, config) : result([]) },
   }, state: { session: {
     permission: (id) => options.livePermission?.(id) || [], question: (id) => options.liveQuestion?.(id) || [],
@@ -517,4 +518,64 @@ test("Kilo busy-queued input still hands off on native idle without a terminal w
   const f = await busyQueued(t, halted);
   await f.idle(); await f.submitted; await f.owners.dispose();
   assert.deepEqual(f.counts, { snapshots: 0, submissions: 1 });
+});
+
+test("busy handoff appends queued input to the current prompt once; idle then has nothing to submit", { timeout: 5000 }, async (t) => {
+  const patches = [];
+  let busy = true, submissions = 0;
+  const f = await fixture(t, { status: async () => result(busy ? { ses_target: { type: "busy" } } : {}),
+    partUpdate: async (params, config) => {
+      assert.equal(config.throwOnError, true); assert.equal(config.redirect, "error");
+      patches.push(params); return result(params.part);
+    },
+    promptAsync: async () => { submissions++; return result(undefined, 204); } });
+  await f.action("ses_target");
+  assert.equal((await f.wires.get("ses_target").call("message.deliver", inbound("first"))).disposition, "queued_for_next_turn");
+  assert.equal((await f.wires.get("ses_target").call("message.deliver", inbound("second"))).disposition, "queued_for_next_turn");
+  const after = "prt_000000000001ABCDEFGHIJKLMN";
+  const reply = await f.owners.nativeInput({ sessionID: "ses_target", messageID: "msg_prompt", after }, new AbortController().signal);
+  assert.equal(patches.length, 1); assert.equal(reply.parts.length, 1);
+  const part = reply.parts[0];
+  assert.deepEqual(patches[0].part, part);
+  assert.equal(patches[0].partID, part.id); assert.equal(patches[0].messageID, "msg_prompt"); assert.equal(patches[0].sessionID, "ses_target");
+  assert.equal(part.type, "text"); assert.ok(part.id > after);
+  assert.match(part.text, /messageId":"first".*messageId":"second"/su);
+  assert.deepEqual((await f.owners.nativeInput({ sessionID: "ses_target", messageID: "msg_prompt", after: part.id }, new AbortController().signal)).parts, []);
+  busy = false;
+  f.events.emit("session.status", { properties: { sessionID: "ses_target", status: { type: "idle" } } });
+  await nextTurn(); await f.owners.dispose();
+  assert.equal(submissions, 0); assert.equal(patches.length, 1);
+});
+
+test("busy handoff: unowned session or unknown floor hands off nothing; an attempted write is never retried", { timeout: 5000 }, async (t) => {
+  let busy = true, submissions = 0, patches = 0;
+  const f = await fixture(t, { status: async () => result(busy ? { ses_target: { type: "busy" } } : {}),
+    partUpdate: async () => { patches++; throw new Error("native write lost"); },
+    promptAsync: async () => { submissions++; return result(undefined, 204); } });
+  const signal = new AbortController().signal;
+  assert.deepEqual(await f.owners.nativeInput({ sessionID: "ses_nobody", messageID: "msg_prompt", after: "prt_000000000001ABCDEFGHIJKLMN" }, signal), { parts: [] });
+  await f.action("ses_target");
+  assert.equal((await f.wires.get("ses_target").call("message.deliver", inbound("kept"))).disposition, "queued_for_next_turn");
+  assert.deepEqual(await f.owners.nativeInput({ sessionID: "ses_target", messageID: "msg_prompt", after: "not-a-native-part" }, signal), { parts: [] });
+  assert.equal(patches, 0);
+  await assert.rejects(f.owners.nativeInput({ sessionID: "ses_target", messageID: "msg_prompt", after: "prt_000000000001ABCDEFGHIJKLMN" }, signal), /native write lost/);
+  assert.equal(patches, 1);
+  busy = false;
+  f.events.emit("session.status", { properties: { sessionID: "ses_target", status: { type: "idle" } } });
+  await nextTurn(); await f.owners.dispose();
+  assert.equal(submissions, 0);
+});
+
+test("busy input not handed off at a step is still delivered by the existing idle wake", { timeout: 5000 }, async (t) => {
+  let busy = true, submissions = 0;
+  const submitted = deferred();
+  const f = await fixture(t, { status: async () => result(busy ? { ses_target: { type: "busy" } } : {}),
+    messages: async () => result([{ info: { id: "msg_done", role: "assistant", time: { completed: 1 } } }]),
+    promptAsync: async (params) => { submissions++; assert.match(params.parts[0].text, /missed_step/); submitted.resolve(); return result(undefined, 204); } });
+  await f.action("ses_target");
+  assert.equal((await f.wires.get("ses_target").call("message.deliver", inbound("missed_step"))).disposition, "queued_for_next_turn");
+  busy = false;
+  f.events.emit("session.status", { properties: { sessionID: "ses_target", status: { type: "idle" } } });
+  await submitted.promise; await f.owners.dispose();
+  assert.equal(submissions, 1);
 });

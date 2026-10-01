@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -23,6 +24,11 @@ type laneRun struct {
 	count     int
 	interrupt *nativeInterrupt
 	rejects   []*nativeInterrupt // wrapper permission rejections issued in this Run
+	// Busy input for this Run's native loop (lane_input.go), and whether the
+	// Run has made its final check for it.
+	inbox      []string
+	inboxBytes int
+	closed     bool
 }
 type nativeInterrupt struct {
 	done chan struct{}
@@ -134,9 +140,45 @@ func (p *Wrapper) executeRun(ctx context.Context, run *kit.Run, input kit.RunInp
 		}
 	}
 	raw, err := op.wait()
-	p.mu.Lock()
-	interrupt, rejects := t.interrupt, t.rejects
-	p.mu.Unlock()
+	// Input queued after the loop's last model call took its share: the Run
+	// sends it as one more ordinary message and ends with that reply. Each
+	// ending decision and the closure are one critical section under Deliver's
+	// lock, so input Deliver accepts is always sent, and later input waits for
+	// the next Run.
+	var interrupt *nativeInterrupt
+	var rejects []*nativeInterrupt
+	for {
+		p.mu.Lock()
+		if err != nil || t.interrupt != nil || len(t.inbox) == 0 || p.ctx.Err() != nil {
+			t.closed = true
+			interrupt, rejects = t.interrupt, t.rejects
+			p.mu.Unlock()
+			break
+		}
+		text := takeInbox(t)
+		p.mu.Unlock()
+		var next string
+		var request *http.Request
+		next, err = p.nextMessageID()
+		if err == nil {
+			b, e := encodeNativeFor(p.kind, p.promptBody(next, text))
+			if err = e; err == nil {
+				request, err = p.client.prepare(p.ctx, "POST", sessionPath(p.id)+"/message", b)
+			}
+		}
+		if err != nil {
+			continue
+		}
+		p.mu.Lock()
+		op, err = p.client.begin(request, 200)
+		if err == nil {
+			t.original, id = op, next
+		}
+		p.mu.Unlock()
+		if err == nil {
+			raw, err = op.wait()
+		}
+	}
 	if interrupt != nil {
 		<-interrupt.done
 		if interrupt.err != nil {
@@ -328,7 +370,7 @@ func (p *Wrapper) Interrupt(ctx context.Context, run *kit.Run) error {
 		return ctx.Err()
 	}
 }
-func (p *Wrapper) Deliver(ctx context.Context, request kit.DeliveryRequest, _ *kit.Run) (kit.DeliveryReceipt, error) {
+func (p *Wrapper) Deliver(ctx context.Context, request kit.DeliveryRequest, run *kit.Run) (kit.DeliveryReceipt, error) {
 	text, err := host.RenderNativeMessage(request)
 	if err != nil {
 		return kit.DeliveryReceipt{}, err
@@ -339,9 +381,12 @@ func (p *Wrapper) Deliver(ctx context.Context, request kit.DeliveryRequest, _ *k
 	if ctx.Err() != nil {
 		return kit.DeliveryReceipt{}, ctx.Err()
 	}
-	// OpenCode's noReply route persists history without entering the native
-	// loop, and Kilo has no active append route. Refuse before either native
-	// write; the daemon retains the original delivery and wakes a fresh run.
+	// The product takes it for the active task (lane_input.go).
+	if run != nil && p.queue(run, text) {
+		return kit.DeliveryReceipt{Disposition: "injected"}, nil
+	}
+	// No native write: the daemon retains the original delivery and wakes a
+	// fresh run after this one.
 	return kit.DeliveryReceipt{}, host.NotRunning()
 }
 func (p *Wrapper) observe(raw []byte) error {

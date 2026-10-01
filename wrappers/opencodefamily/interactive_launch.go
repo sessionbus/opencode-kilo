@@ -19,7 +19,6 @@ import (
 	"github.com/sessionbus/peer-common/host"
 )
 
-const OpenCodeInteractiveLaunchEnv = "SESSIONBUS_OPENCODE_LAUNCH"
 const KiloInteractiveLaunchEnv = "SESSIONBUS_KILO_LAUNCH"
 
 type interactiveProduct struct {
@@ -33,13 +32,6 @@ type InteractiveLaunchBinding struct {
 	Socket    string   `json:"socket"`
 	Name      string   `json:"name"`
 	Groups    []string `json:"groups"`
-}
-
-// RunOpenCodeInteractive retains only direct-child/transient-directory ownership. All
-// interactive Peer/Caller state belongs to the native TUI plugin. Abrupt launcher
-// death cannot promise native retirement or removal of the launch directory.
-func RunOpenCodeInteractive(ctx context.Context, plan host.ExecPlan) error {
-	return runInteractive(ctx, plan, interactiveProduct{"opencode", "OpenCode", OpenCodeInteractiveLaunchEnv, "OPENCODE_SERVER_PASSWORD", false})
 }
 
 // RunKiloInteractive requires the caller's already resolved direct executable

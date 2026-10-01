@@ -34,7 +34,14 @@ func stageMatchesManifestAndCommonSource(t *testing.T, product string) {
 	}
 	common := filepath.Join(repo, "wrappers", "opencodefamily", "plugin")
 	var modules, declared []string
-	files, err := os.ReadDir(common)
+	// Kilo ships every common module; OpenCode ships its own entries plus the
+	// common modules it reuses.
+	source := common
+	if product == "opencode" {
+		source = filepath.Join(repo, "wrappers", "opencode", "plugin")
+		modules = append(modules, runtimeFiles["opencode"]...)
+	}
+	files, err := os.ReadDir(source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,6 +129,9 @@ func TestStageIncludesEveryDevelopmentTest(t *testing.T) {
 func stageIncludesEveryDevelopmentTest(t *testing.T, product string) {
 	repo := filepath.Join("..", "..")
 	common := filepath.Join(repo, "wrappers", "opencodefamily", "plugin")
+	if product == "opencode" {
+		common = filepath.Join(repo, "wrappers", "opencode", "plugin")
+	}
 	sources, err := developmentFiles(common)
 	if err != nil {
 		t.Fatal(err)

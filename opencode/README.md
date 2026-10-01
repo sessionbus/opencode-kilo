@@ -11,9 +11,11 @@ The archive contains the Go installer/launcher, a small JavaScript plugin that
 runs inside OpenCode's existing Bun runtime, and the Sessionbus JS kit pinned
 to exact registry version `0.5.9` in the package manifest and lockfile.
 No separate Node, npm, Bun installation, Go broker, or native OpenCode patch is
-required on the target. Source builds use Go and npm. The inspected released
-native interface is OpenCode 1.18.29/1.18.30; installed acceptance is reported
-separately from source compatibility.
+required on the target. Source builds use Go and npm. The target native is
+OpenCode 2.0.21 (the v2 line with its background service). Interactive
+behaviour has live acceptance evidence on that build for the recorded cells only;
+lanes on OpenCode 2.0.21 are not yet live-proven. Installed acceptance is
+reported separately from source compatibility.
 
 The installer edits only owned entries in native global server/TUI JSON/JSONC
 configuration, preserving comments and unrelated settings/plugins. Repeat
@@ -65,12 +67,13 @@ Native-only interactive sessions can be resumed in fresh `opencode-peer`
 launches. The wrapper does not invent another ID or automatically forget the
 lane to bypass this boundary.
 
-Each selected session remains addressable until native deletion or TUI disposal.
-The public tool takes exactly `action` and `arguments`. Native tool context
-binds every call to its actual session, including delayed old-session calls
-and child/subagent calls. An interactive child becomes an addressable peer;
-inbound input can run it outside the parent task. A lane child instead uses the
-verified ancestor lane's single Worker capability.
+A managed session stays on the bus while OpenCode keeps it loaded: closing the
+TUI does not remove it, native session deletion does, and so does OpenCode
+unloading its idle directory (about 60 minutes without activity). A session
+whose TUI is still open is activated again when OpenCode reloads it. The public
+tool takes exactly `action` and `arguments`. Native sub-agent (task) sessions
+are never peers of their own: where OpenCode lets one use the tool, it speaks
+as the managed session or lane it descends from.
 
 Lane model selection follows native configuration. A caller can set an explicit
 `open.model` such as `"google/gemini-3.1-pro-preview"` in a spawn request. A lane
@@ -84,46 +87,37 @@ returned run explicitly. `list.self_info`, when supplied by the daemon, identifi
 the caller even if filters exclude its row. Older daemons may omit it; names
 and row ordering are not identity fallbacks.
 
-Interactive delivery keeps bounded unsent input while native status is busy.
-Input queued while busy is handed off only after the active assistant's native
-completion and the native idle that follows it; a halted turn's earlier idle is
-not enough. Input arriving while idle is handed off directly. Limitation: if
-the owner saw no assistant event for that turn (attached mid-step or missed
-events), a latest operator or native user message, or an already completed
-assistant, cannot be correlated with the idle, which then hands off best
-effort. A confirmed native handoff is `written`, not proof of model consumption
-in that turn. Attempted input is never replayed after an uncertain response,
-cancellation or terminal race. Native storage remains native; no wrapper
-history, result journal or restart recovery is added.
+A message to a managed session is one native steer prompt, and the receipt is
+`injected` once OpenCode admits it. An idle session starts a new turn with it;
+a busy session receives it at the next model step of the turn it is running,
+not after that turn ends. The receipt is not proof of model consumption.
+Attempted input is never replayed after an uncertain response. Native storage
+remains native; no wrapper history, result journal or restart recovery is added.
 
-The managed launcher selects authenticated native loopback HTTP so owned
-requests can be cancelled and joined. Caller hostname/port/mDNS/CORS switches
-and enabled pure mode conflict and fail clearly; native network options have
-no short aliases in the inspected releases. Existing nonempty
-`OPENCODE_SERVER_*` credentials are preserved, otherwise the launcher generates
-a private password. Native auth environment can reach native shell-tool children.
-Sessionbus launch variables are snapshotted and scrubbed in both native contexts.
-Local-key Sessionbus transport is unsupported and fails before managed launch.
-HTTP cancellation does not imply model cancellation. Remote attach requires a
-separately equipped server and is not claimed by this local topology.
+`opencode-peer` replaces itself with the native TUI, which uses your background
+OpenCode service as usual. The Sessionbus attachment lives in that service's
+plugin, not in a separate process. Sessionbus launch variables are scrubbed
+before native starts. Local-key Sessionbus transport is unsupported and fails
+before managed launch. Signals and TUI exit end only the TUI; its session stays
+on the bus until native deletes or unloads it, as above.
 
-SIGTERM and SIGHUP join the direct native child and remove launch resources;
-SIGINT remains a native TUI action. Abrupt launcher SIGKILL can leave the native
-TUI, its peers and the unique directory alive. No extra supervisor is installed.
-A failed TUI ownership claim is never transferred or recovered in that launch.
+Lanes (sessions started through Sessionbus `spawn`) are clients of your
+background OpenCode service, as native `opencode run` is: your logins, history
+and default model apply. A lane never stops the service. A service restart ends
+the lane's running Run (reported unavailable), after which OpenCode may continue
+that turn by itself; killing a lane worker does not stop a turn already running.
+A message to a busy lane reaches its current turn at the next model step. With
+no human present, permission asks and questions in a lane are declined with a
+message and the model continues, unless the lane was opened with
+`permission_mode` `bypassPermissions`.
 
-Owners are bounded to 128 including retirement, with 16 pending identity
-establishments and 256 owned HTTP operations. Each owner retains at most 64
-unsent messages/1 MiB, with a 16 MiB aggregate FIFO. The kit adapter shares a
-256-work limit between tools and delivery, so a burst can reject new work.
-The resident bridge allows eight connections, 2 MiB ingress, 8 MiB responses,
-256 work and 32 MiB retained payload. Native SDK response parsing allocations
-are outside these wrapper bounds. Kit ready reassignment is observed at its
-pinned reconnect scheduler boundary; a failed attempt is never hello admission.
+The kit adapter shares a 256-work limit between tools and delivery, so a burst
+can reject new work. A lane's tool bridge allows eight connections, 2 MiB
+ingress, 8 MiB responses, 256 work and 32 MiB retained payload.
 
-The rewrite's verified acceptance scopes and retained limitations are recorded in
-[the acceptance index](../docs/designs/opencode-0.5.0/ACCEPTANCE.md). Historical
-product probes remain separately identified in the product facts.
+The [acceptance index](../docs/designs/opencode-0.5.0/ACCEPTANCE.md) records the
+OpenCode 1.18 rewrite's acceptance and is historical for OpenCode 2.0.21.
+Historical product probes remain separately identified in the product facts.
 
 Local package installation (`--plugin-dir` or a validated `file:` package directory)
 registers the bundled generic Sessionbus skill through native `skills.paths`.

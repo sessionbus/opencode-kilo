@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { nativeProduct } from "./profile.mjs";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 export const deliveryLimits = Object.freeze({ messages: 64, ownerBytes: 1024 * 1024, totalBytes: 16 * 1024 * 1024 });
 
@@ -14,6 +14,20 @@ export function renderDelivery(request) {
     .replace(/[<>&\u2028\u2029]/gu, (character) => escaped[character]);
   const body = request.body.replace(/<\/cross-session-message/giu, "<\\/cross-session-message");
   return `<cross-session-message from="${clean(request.from.name || request.from.session_id)}" from-session="${clean(request.from.session_id)}">\n[sessionbus-metadata: ${metadata}]\n${body}\n</cross-session-message>`;
+}
+
+// Native orders a message's parts by ID (fixed-width `prt_` + 12 hex + 14
+// base62, compared bytewise). A handed-off part must sort after the current
+// user's existing parts, so derive it from the native clock encoding and never
+// below `after`. An unrecognised floor means no handoff at this step.
+const base62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+export function nextPartID(after, now = Date.now(), entropy = randomBytes) {
+  if (typeof after !== "string" || !/^prt_[0-9a-f]{12}[0-9A-Za-z]{14}$/u.test(after)) return undefined;
+  const floor = BigInt(`0x${after.slice(4, 16)}`);
+  let head = (BigInt(now) * 4096n) & 0xffffffffffffn;
+  if (head <= floor) head = floor + 1n;
+  if (head > 0xffffffffffffn) return undefined;
+  return `prt_${head.toString(16).padStart(12, "0")}${[...entropy(14)].map((byte) => base62[byte % 62]).join("")}`;
 }
 
 export class NativeDelivery {
@@ -53,9 +67,42 @@ export class NativeDelivery {
   }
 
   idle() {
-    if (this.#closed || !this.#queue.length) return Promise.resolve();
+    if (this.#closed) return Promise.resolve();
+    // Kept even while the FIFO is momentarily empty (a step handoff can hold the
+    // consumer): input accepted before that consumer settles drains then.
     this.#idleDemand = true;
+    if (!this.#queue.length) return Promise.resolve();
     return this.#drain(this.#options.signal);
+  }
+
+  // Busy handoff at a native model step: hand the FIFO prefix to `patch`, which
+  // appends it to the current user message. It shares the idle drain's single
+  // consumer slot, so a step never overlaps a submission. Items leave the FIFO
+  // only when `patch` reports the native write started; anything not taken stays
+  // queued for a later step or the idle drain. Attempted input is never retried.
+  async take(signal, patch) {
+    if (this.#closed || this.#active || !this.#queue.length) return undefined;
+    let settle;
+    this.#active = new Promise((resolve) => { settle = resolve; });
+    try {
+      const items = [];
+      let bytes = 0;
+      for (const item of this.#queue) {
+        if (items.length && bytes + item.bytes > deliveryLimits.ownerBytes) break;
+        items.push(item);
+        bytes += item.bytes;
+      }
+      const cancel = AbortSignal.any([signal, this.#options.signal]);
+      const part = await patch(items.map((item) => item.text).join("\n\n"), cancel, () => {
+        for (const item of items) { this.#remove(item); item.attempted = true; }
+      });
+      for (const item of items) item.written = true;
+      return part;
+    } finally {
+      this.#active = undefined;
+      settle();
+      if (this.#idleDemand && !this.#closed && this.#queue.length) void this.idle().catch((error) => this.#options.report?.(error));
+    }
   }
 
   #drain(signal) {

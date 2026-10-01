@@ -26,7 +26,7 @@ func main() {
 		panic(err)
 	}
 	encode := json.NewEncoder(conn)
-	if err := encode.Encode(map[string]any{"pid": os.Getpid(), "ppid": os.Getppid(), "cwd": cwd, "args": os.Args[1:], "launch": launch, "password": os.Getenv("OPENCODE_SERVER_PASSWORD"), "username": os.Getenv("OPENCODE_SERVER_USERNAME"), "old_id": os.Getenv("SESSIONBUS_SESSION_ID")}); err != nil {
+	if err := encode.Encode(map[string]any{"pid": os.Getpid(), "ppid": os.Getppid(), "cwd": cwd, "args": os.Args[1:], "launch": launch, "old_id": os.Getenv("SESSIONBUS_SESSION_ID")}); err != nil {
 		panic(err)
 	}
 	switch os.Getenv("OC_TEST_MODE") {

@@ -74,6 +74,12 @@ export class SessionbusForwarder {
     }).catch((error) => this.#fail(error));
   }
 
+  // Settles when the endpoint connection has closed; the session this
+  // connection serves is released then.
+  get closed() {
+    return this.#closed;
+  }
+
   ready(signal) {
     if (this.#failure) return Promise.reject(this.#failure);
     if (signal?.aborted) return Promise.reject(aborted(signal));
@@ -105,6 +111,27 @@ export class SessionbusForwarder {
     } finally {
       this.#operations--;
     }
+  }
+
+  // Lane counterpart of nativeInput: the Go lane owner's hidden hook tool
+  // writes queued input as the requested native part and replies once written.
+  async laneInput(parameters, signal) {
+    if (this.#operations >= bridgeLimits.work) throw new Error("Sessionbus forwarder work limit reached");
+    this.#operations++;
+    try {
+      await this.ready(signal);
+      const result = await this.#request("tools/call", { name: "sessionbus_native_input", arguments: parameters }, signal);
+      if (result?.isError) throw new ForwardedToolError(JSON.parse(result.content?.[0]?.text ?? "{}"));
+    } finally { this.#operations--; }
+  }
+
+  async nativeInput(parameters, signal) {
+    if (this.#operations >= bridgeLimits.work) throw new Error("Sessionbus forwarder work limit reached");
+    this.#operations++;
+    try {
+      await this.ready(signal);
+      return await this.#request("sessionbus/native-input", parameters, signal);
+    } finally { this.#operations--; }
   }
 
   async dispose() {
