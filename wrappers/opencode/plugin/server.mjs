@@ -56,9 +56,10 @@ export function createServer(dependencies = {}) {
       },
     }));
     // Only attached sessions see the tool. A native Task child of an attached
-    // session attaches at its first model request, under its own ID and title
-    // with the parent's groups: a new child, and an existing one native
-    // continues (subagent sessionID reuse creates no session).
+    // session that is not attached yet (native continues an existing child
+    // through subagent sessionID reuse, which creates no session) attaches
+    // before its model request, under its own ID and title with the parent's
+    // groups.
     await ctx.session.hook("context", async (request) => {
       if (peers.has(request.sessionID)) return;
       if (peers.size) {
@@ -72,13 +73,20 @@ export function createServer(dependencies = {}) {
       }
       delete request.tools.sessionbus;
     });
-    // One native event loop: a deleted session leaves the bus; a renamed one
-    // says hello again under its new title (a title outside the bus name
-    // grammar keeps the old one).
+    // One native event loop:
+    // - a native Task child of an attached session becomes its own peer at
+    //   creation, with its own ID and title and the parent's groups;
+    // - a deleted session leaves the bus;
+    // - a renamed one says hello again under its new title (a title outside
+    //   the bus name grammar keeps the old one).
     const events = new AbortController();
     void (async () => {
       for await (const event of ctx.event.subscribe({ signal: events.signal })) {
         const data = event?.data;
+        if (event?.type === "session.created" && peers.has(data?.parentID)) {
+          const parent = peers.get(data.parentID);
+          void attach(data.sessionID, { socket: parent.socket, groups: parent.groups }).catch(report);
+        }
         if (event?.type === "session.deleted") void peers.get(data?.sessionID)?.peer.dispose();
         const renamed = event?.type === "session.renamed" ? peers.get(data?.sessionID) : undefined;
         if (renamed && validate("SessionHelloRequest", { protocol: 1, product: "opencode-peer", session_id: data.sessionID, groups: [], info: { cwd: ctx.location.directory }, name: data.title })) {

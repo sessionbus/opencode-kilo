@@ -100,7 +100,34 @@ test("server: a failed native prompt is an uncertain outcome at the bus, never a
   await cleanup();
 });
 
-test("server: a native Task child attaches at its first model request as its own peer, new or reused", async (t) => {
+test("server: a native Task child of an attached session becomes its own peer at creation with the parent's groups", async (t) => {
+  const { peers, peer } = fakePeers();
+  const ctx = serverContext(t);
+  ctx.session.get = async ({ sessionID }) => ({ id: sessionID, title: sessionID === "ses_child" ? "child task" : "native title", parentID: { ses_child: "ses_a", ses_grandchild: "ses_child" }[sessionID] });
+  const cleanup = await createServer({ peer })(ctx);
+  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"], name: "worker" });
+  ctx.publish({ type: "session.created", data: { sessionID: "ses_unrelated", title: "other" } });
+  ctx.publish({ type: "session.created", data: { sessionID: "ses_child", parentID: "ses_a", title: "child task" } });
+  ctx.publish({ type: "session.created", data: { sessionID: "ses_grandchild", parentID: "ses_child" } });
+  for (let i = 0; i < 10 && peers.length < 3; i++) await flush();
+  assert.deepEqual(peers.map((value) => [value.identity.session_id, value.identity.name, value.identity.groups, value.env.SESSIONBUS_SOCKET]), [
+    ["ses_a", "worker", ["team"], "/bus.sock"],
+    ["ses_child", "child task", ["team"], "/bus.sock"],
+    ["ses_grandchild", "native title", ["team"], "/bus.sock"],
+  ]);
+  // The child's tool acts as the child, not the parent.
+  await ctx.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_child" });
+  assert.deepEqual(peers[1].actions, [["list", {}]]); assert.deepEqual(peers[0].actions, []);
+  await assert.rejects(ctx.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_unrelated" }), /not active/u);
+  // Its first model request keeps the tool and does not attach it again.
+  const first = { sessionID: "ses_child", tools: { sessionbus: {} } };
+  await ctx.hooks.context(first);
+  assert.deepEqual(Object.keys(first.tools), ["sessionbus"]); assert.equal(peers.length, 3);
+  await cleanup();
+  assert.ok(peers.every((value) => value.disposed));
+});
+
+test("server: a Task child with no session.created (native reuse) attaches at its model request as its own peer", async (t) => {
   const { peers, peer } = fakePeers();
   const ctx = serverContext(t);
   const parents = { ses_child: "ses_a", ses_grandchild: "ses_child", ses_stray: "ses_not_attached" };
@@ -113,7 +140,7 @@ test("server: a native Task child attaches at its first model request as its own
   await ctx.hooks.context(early);
   assert.equal(lookups, 0); assert.deepEqual(Object.keys(early.tools), []);
   await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"], name: "worker" });
-  // A child (new, or an existing one native continues: no session.created either way).
+  // An existing child native continues: no session.created reaches the plugin.
   const child = { sessionID: "ses_child", tools: { sessionbus: {} } };
   await ctx.hooks.context(child);
   const grandchild = { sessionID: "ses_grandchild", tools: { sessionbus: {} } };
