@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
 	"slices"
 	"strings"
@@ -103,7 +104,6 @@ func (l *Lane) observe(event nativeEvent) {
 	}
 	var data struct {
 		SessionID string          `json:"sessionID"`
-		ParentID  string          `json:"parentID"`
 		InboxID   string          `json:"inboxID"`
 		Reason    string          `json:"reason"`
 		ID        string          `json:"id"`
@@ -120,10 +120,6 @@ func (l *Lane) observe(event nativeEvent) {
 	l.mu.Lock()
 	l.position++
 	at, r, session := l.position, l.active, l.session
-	// Native announces each session with its parent, in stream order.
-	if event.Type == "session.created" && data.ParentID != "" && l.lineage[data.ParentID] {
-		l.lineage[data.SessionID] = true
-	}
 	if r != nil && data.SessionID == session && session != "" {
 		switch event.Type {
 		case "session.inbox.enqueued":
@@ -289,13 +285,18 @@ func (l *Lane) Run(ctx context.Context, run *kit.Run, input kit.RunInput) (kit.T
 		return kit.TurnResult{}, context.Cause(life)
 	}
 	l.mu.Lock()
-	outcome, reason, message := r.outcome, r.reason, r.message
+	outcome, reason, message, unknown := r.outcome, r.reason, r.message, len(r.released)
 	l.mu.Unlock()
 	switch outcome {
 	case "failed":
 		return kit.TurnResult{Outcome: "failed", Result: message, NativeStopReason: reason}, nil
 	case "interrupted":
 		return kit.TurnResult{Outcome: "interrupted", Result: message, NativeStopReason: reason}, nil
+	}
+	// A delivery whose native admission stayed unknown may still run: a
+	// completed result would claim more than native showed.
+	if unknown > 0 {
+		return kit.TurnResult{}, fmt.Errorf("OpenCode admission of %d delivery(ies) in this Run is unknown", unknown)
 	}
 	return l.project(life, client, session, id)
 }

@@ -450,7 +450,8 @@ func TestLaneAmbiguousDeliverWithObservedAdmissionIsInjected(t *testing.T) {
 	}
 }
 
-// An answer that leaves admission unknown is -32603 and is never replayed.
+// An answer that leaves admission unknown is -32603 and is never replayed, and
+// the Run cannot then claim a completed result.
 func TestLaneAmbiguousDeliverWithoutAdmissionIsInternalAndNotReplayed(t *testing.T) {
 	f := newLaneFixture(t, kit.OpenOptions{}, "", func(n *fakeNative) { n.holds["lost"] = breakResponse })
 	own := f.start(t, 1, "task")
@@ -462,7 +463,7 @@ func TestLaneAmbiguousDeliverWithoutAdmissionIsInternalAndNotReplayed(t *testing
 	}
 	f.answered(own, "OK")
 	succeeded(f.native)
-	if status := f.status(t, "turn.wait", 1); status.State != "done" {
+	if status := f.status(t, "turn.wait", 1); status.State != "unavailable" || status.Result != nil {
 		t.Fatalf("status = %+v", status)
 	}
 	f.native.mu.Lock()
@@ -679,5 +680,25 @@ func TestLaneDeliverRefusalNeedsADeclaredPreAdmissionError(t *testing.T) {
 	}
 	if frame := f.answer(t, f.deliver(t, "wake")); frame.Error == nil || frame.Error.Code != protocol.Internal {
 		t.Fatalf("post-admission failure = %+v %s", frame.Error, frame.Result)
+	}
+}
+
+// A released delivery that native then visibly admits before the terminal is
+// tracked again and completes the Run normally.
+func TestLaneReleasedDeliverSeenBeforeTerminalIsTrackedAgain(t *testing.T) {
+	f := newLaneFixture(t, kit.OpenOptions{}, "", func(n *fakeNative) { n.holds["late"] = breakResponse })
+	own := f.start(t, 1, "task")
+	delivered(f.native, own)
+	receipt := f.deliver(t, "late")
+	steer := f.prompt(t, "late")
+	if frame := f.answer(t, receipt); frame.Error == nil || frame.Error.Code != protocol.Internal {
+		t.Fatalf("receipt = %+v", frame.Error)
+	}
+	f.native.emit("session.inbox.enqueued", map[string]any{"sessionID": "ses_lane", "inboxID": steer})
+	f.native.emit("session.inbox.delivered", map[string]any{"sessionID": "ses_lane", "inboxID": steer})
+	f.answered(own, "BOTH")
+	succeeded(f.native)
+	if status := f.status(t, "turn.wait", 1); status.State != "done" || status.Result.Result != "BOTH" {
+		t.Fatalf("status = %+v", status)
 	}
 }
