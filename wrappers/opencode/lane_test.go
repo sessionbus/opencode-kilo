@@ -857,6 +857,38 @@ func TestLaneSteerInFlightAtInterruptIsWithdrawnAfterItsAnswer(t *testing.T) {
 	}
 }
 
+// A steer whose request answers before its cancelled Run's terminal is left
+// to the Run's withdrawal, so a failed interrupt cannot have dropped it.
+func TestLaneSteerAnsweredBeforeTheTerminalIsWithdrawnOnceByTheRun(t *testing.T) {
+	release := make(chan struct{})
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	f := newLaneFixture(t, kit.OpenOptions{}, "", func(n *fakeNative) {
+		n.holds["early"] = func(w http.ResponseWriter) {
+			<-release
+			json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{}})
+		}
+	})
+	t.Cleanup(unblock)
+	own := f.start(t, 1, "task")
+	delivered(f.native, own)
+	receipt := f.deliver(t, "early")
+	early := f.prompt(t, "early")
+	f.interrupt(t)
+	unblock()
+	if frame := f.answer(t, receipt); frame.Error != nil || !strings.Contains(string(frame.Result), `"injected"`) {
+		t.Fatalf("receipt = %+v %s", frame.Error, frame.Result)
+	}
+	if got := f.native.withdrawn(); len(got) != 0 {
+		t.Fatalf("withdrawn before the terminal = %q", got)
+	}
+	f.native.emit("session.execution.interrupted", map[string]any{"sessionID": "ses_lane", "reason": "user"})
+	f.status(t, "turn.wait", 1)
+	if got := f.native.withdrawn(); !slices.Equal(got, []string{early}) {
+		t.Fatalf("withdrawn by the Run = %q", got)
+	}
+}
+
 // A withdrawal native does not confirm is reported with the interrupted
 // terminal and is not retried; the lane stays usable.
 func TestLaneUnconfirmedWithdrawalIsReportedAndKeepsTheLane(t *testing.T) {

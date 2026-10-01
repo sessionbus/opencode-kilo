@@ -469,12 +469,13 @@ func (l *Lane) Deliver(ctx context.Context, request kit.DeliveryRequest, run *ki
 	stop()
 	cancel()
 	admitted := l.resolve(r, id, err)
-	// Submitted before its Run was cancelled: whatever the answer, native may
-	// hold it, so it is withdrawn like the Run's other undelivered steers.
+	// Answered only after its cancelled Run ended: whatever the answer, native
+	// may hold it, so it is withdrawn like the Run's other undelivered steers.
+	// Before the terminal, the Run's own withdrawal covers it.
 	l.mu.Lock()
-	cancelled := r.cancelled
+	late := r.cancelled && r.final
 	l.mu.Unlock()
-	if cancelled && l.withdraw(client, session, id) != nil {
+	if late && l.withdraw(client, session, id) != nil {
 		return kit.DeliveryReceipt{}, &kit.ProtocolError{Code: protocol.Internal, Message: "internal", Data: json.RawMessage(`"OpenCode input not withdrawn after its Run was cancelled; it may run with the next task"`)}
 	}
 	var refused *nativeStatus
