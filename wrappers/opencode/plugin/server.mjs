@@ -16,6 +16,7 @@ export function createServer(dependencies = {}) {
   return async function setup(ctx) {
     // sessionID -> { peer, socket, groups } for this instance only.
     const peers = new Map();
+    const report = (error) => console.error(`sessionbus: ${error?.message || error}`);
     const attach = async (sessionID, binding) => {
       const session = await ctx.session.get({ sessionID });
       // Native does not serialize handlers: a concurrent attach may have won.
@@ -54,25 +55,30 @@ export function createServer(dependencies = {}) {
         return { content: JSON.stringify(await entry.peer.action(input.action, input.arguments, context.signal)) };
       },
     }));
-    // Only attached sessions see the tool.
-    await ctx.session.hook("context", (request) => {
-      if (!peers.has(request.sessionID)) delete request.tools.sessionbus;
+    // Only attached sessions see the tool. A native Task child of an attached
+    // session attaches at its first model request, under its own ID and title
+    // with the parent's groups: a new child, and an existing one native
+    // continues (subagent sessionID reuse creates no session).
+    await ctx.session.hook("context", async (request) => {
+      if (peers.has(request.sessionID)) return;
+      if (peers.size) {
+        try {
+          const parent = peers.get((await ctx.session.get({ sessionID: request.sessionID }))?.parentID);
+          if (parent) await attach(request.sessionID, { socket: parent.socket, groups: parent.groups });
+          if (peers.has(request.sessionID)) return;
+        } catch (error) {
+          report(error);
+        }
+      }
+      delete request.tools.sessionbus;
     });
-    // One native event loop:
-    // - a native Task child of an attached session becomes its own peer, with
-    //   its own ID and title and the parent's groups;
-    // - a deleted session leaves the bus;
-    // - a renamed one says hello again under its new title (a title outside
-    //   the bus name grammar keeps the old one).
+    // One native event loop: a deleted session leaves the bus; a renamed one
+    // says hello again under its new title (a title outside the bus name
+    // grammar keeps the old one).
     const events = new AbortController();
-    const report = (error) => console.error(`sessionbus: ${error?.message || error}`);
     void (async () => {
       for await (const event of ctx.event.subscribe({ signal: events.signal })) {
         const data = event?.data;
-        if (event?.type === "session.created" && peers.has(data?.parentID)) {
-          const parent = peers.get(data.parentID);
-          void attach(data.sessionID, { socket: parent.socket, groups: parent.groups }).catch(report);
-        }
         if (event?.type === "session.deleted") void peers.get(data?.sessionID)?.peer.dispose();
         const renamed = event?.type === "session.renamed" ? peers.get(data?.sessionID) : undefined;
         if (renamed && validate("SessionHelloRequest", { protocol: 1, product: "opencode-peer", session_id: data.sessionID, groups: [], info: { cwd: ctx.location.directory }, name: data.title })) {

@@ -100,25 +100,46 @@ test("server: a failed native prompt is an uncertain outcome at the bus, never a
   await cleanup();
 });
 
-test("server: a native Task child of an attached session becomes its own peer with the parent's groups", async (t) => {
+test("server: a native Task child attaches at its first model request as its own peer, new or reused", async (t) => {
   const { peers, peer } = fakePeers();
   const ctx = serverContext(t);
-  ctx.session.get = async ({ sessionID }) => ({ id: sessionID, title: sessionID === "ses_child" ? "child task" : "native title" });
+  const parents = { ses_child: "ses_a", ses_grandchild: "ses_child", ses_stray: "ses_not_attached" };
+  const titles = { ses_child: "child task" };
+  let lookups = 0;
+  ctx.session.get = async ({ sessionID }) => { lookups++; return { id: sessionID, title: titles[sessionID] || "native title", parentID: parents[sessionID] }; };
   const cleanup = await createServer({ peer })(ctx);
+  // No attached session: unrelated requests cost no lookup and lose the tool.
+  const early = { sessionID: "ses_unrelated", tools: { sessionbus: {} } };
+  await ctx.hooks.context(early);
+  assert.equal(lookups, 0); assert.deepEqual(Object.keys(early.tools), []);
   await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"], name: "worker" });
-  ctx.publish({ type: "session.created", data: { sessionID: "ses_unrelated", title: "other" } });
-  ctx.publish({ type: "session.created", data: { sessionID: "ses_child", parentID: "ses_a", title: "child task" } });
-  ctx.publish({ type: "session.created", data: { sessionID: "ses_grandchild", parentID: "ses_child" } });
-  for (let i = 0; i < 10 && peers.length < 3; i++) await flush();
+  // A child (new, or an existing one native continues: no session.created either way).
+  const child = { sessionID: "ses_child", tools: { sessionbus: {} } };
+  await ctx.hooks.context(child);
+  const grandchild = { sessionID: "ses_grandchild", tools: { sessionbus: {} } };
+  await ctx.hooks.context(grandchild);
+  const unrelated = { sessionID: "ses_unrelated", tools: { sessionbus: {} } };
+  await ctx.hooks.context(unrelated);
+  // A child of a session that is not attached is never adopted.
+  const stray = { sessionID: "ses_stray", tools: { sessionbus: {} } };
+  await ctx.hooks.context(stray);
+  assert.deepEqual(Object.keys(child.tools), ["sessionbus"]); assert.deepEqual(Object.keys(grandchild.tools), ["sessionbus"]);
+  assert.deepEqual(Object.keys(unrelated.tools), []); assert.deepEqual(Object.keys(stray.tools), []);
   assert.deepEqual(peers.map((value) => [value.identity.session_id, value.identity.name, value.identity.groups, value.env.SESSIONBUS_SOCKET]), [
     ["ses_a", "worker", ["team"], "/bus.sock"],
     ["ses_child", "child task", ["team"], "/bus.sock"],
     ["ses_grandchild", "native title", ["team"], "/bus.sock"],
   ]);
-  // The child's tool acts as the child, not the parent.
+  // The child's tool acts as the child; a second request does not attach again.
   await ctx.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_child" });
   assert.deepEqual(peers[1].actions, [["list", {}]]); assert.deepEqual(peers[0].actions, []);
-  await assert.rejects(ctx.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_unrelated" }), /not active/u);
+  await ctx.hooks.context({ sessionID: "ses_child", tools: { sessionbus: {} } });
+  assert.equal(peers.length, 3);
+  // A failing lookup never throws into native; the tool is removed for that request.
+  ctx.session.get = async () => { throw new Error("lookup failed"); };
+  const failing = { sessionID: "ses_other_child", tools: { sessionbus: {} } };
+  await ctx.hooks.context(failing);
+  assert.deepEqual(Object.keys(failing.tools), []);
   await cleanup();
   assert.ok(peers.every((value) => value.disposed));
 });
