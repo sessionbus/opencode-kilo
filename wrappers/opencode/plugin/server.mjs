@@ -54,8 +54,10 @@ export function createServer(dependencies = {}) {
     };
     await ctx.rpc.register(contract, {
       activate: async (input) => {
-        // Idempotent: the TUI activates again after reconnects and unloads.
-        if (!peers.has(input.sessionID)) await attach(input.sessionID, input, true);
+        // Idempotent: the TUI activates again after reconnects and unloads. A
+        // session already attached as a sub-agent keeps its Peer and still gets
+        // the grant.
+        await attach(input.sessionID, input, true);
         return {};
       },
     });

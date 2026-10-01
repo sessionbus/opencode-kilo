@@ -199,10 +199,16 @@ test("server: an activated session keeps the Sessionbus tool through one last al
   await ctx.hooks.context({ sessionID: "ses_reused", tools: { sessionbus: {} } });
   assert.deepEqual(peers.map((value) => value.identity.session_id), ["ses_deny", "ses_granted", "ses_buried", "ses_none", "ses_child", "ses_reused"]);
   assert.equal(ctx.updates.length, 3);
-  // An activation that cannot be granted is not attached: no Peer without its tool.
+  // A managed TUI showing a sub-agent attached best effort grants it, keeping its Peer.
+  await ctx.handlers.activate({ sessionID: "ses_child", socket: "/bus.sock", groups: ["team"] });
+  assert.deepEqual(ctx.updates.at(-1), { sessionID: "ses_child", permissions: [deny, grant] });
+  assert.equal(peers.length, 6);
+  // An activation that cannot be granted is not attached: no Peer without its
+  // tool, and an existing Peer is left as it is.
   ctx.session.update = async () => { throw new Error("update failed"); };
   await assert.rejects(ctx.handlers.activate({ sessionID: "ses_failed", socket: "/bus.sock", groups: ["team"] }), /update failed/u);
-  assert.equal(peers.length, 6);
+  await assert.rejects(ctx.handlers.activate({ sessionID: "ses_reused", socket: "/bus.sock", groups: ["team"] }), /update failed/u);
+  assert.equal(peers.length, 6); assert.ok(peers.every((value) => !value.disposed));
   await cleanup();
 });
 
