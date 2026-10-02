@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"slices"
 	"strings"
 
@@ -60,6 +61,13 @@ func (r *laneRun) undelivered() []string {
 		}
 	}
 	return ids
+}
+
+// userInterrupted reports a Run whose own native terminal is a user
+// interrupt. Native leaves its undelivered steers parked (resume=false), so
+// they are withdrawn: those pending at the end, and any answered after it.
+func (r *laneRun) userInterrupted() bool {
+	return r.final && r.outcome == "interrupted" && r.reason == "user"
 }
 
 // settle records the Run's terminal once.
@@ -304,9 +312,12 @@ func (l *Lane) Run(ctx context.Context, run *kit.Run, input kit.RunInput) (kit.T
 			l.fail(err)
 		}
 	}
+	// An interrupt that arrived before this Run was active found nothing to
+	// stop. A failed request is reported as the kit reports its own call; it
+	// leaves the task running and the lane usable.
 	if run.Interrupted() {
 		if err := l.Interrupt(life, run); err != nil {
-			l.fail(err)
+			fmt.Fprintf(os.Stderr, "sessionbus: product interrupt: %q\n", err.Error())
 		}
 	}
 	select {
@@ -317,13 +328,13 @@ func (l *Lane) Run(ctx context.Context, run *kit.Run, input kit.RunInput) (kit.T
 	l.mu.Lock()
 	outcome, reason, message, unknown, early := r.outcome, r.reason, r.message, len(r.released), r.early
 	var steers []string
-	if r.cancelled {
+	if r.userInterrupted() {
 		steers = r.undelivered()
 	}
 	l.mu.Unlock()
-	// A cancelled Run withdraws its undelivered steers before it ends: with
-	// resume=false native leaves them parked, and the next Run's prompt would
-	// deliver them. No retry; a failure is reported with the Run's terminal.
+	// A user-interrupted Run withdraws its undelivered steers before it ends:
+	// native leaves them parked, and the next Run's prompt would deliver them.
+	// No retry; a failure is reported with the Run's terminal.
 	var failed []error
 	for _, steer := range steers {
 		failed = append(failed, l.withdraw(client, session, steer))
