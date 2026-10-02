@@ -235,10 +235,17 @@ test("a superseded peer rejects ready and actions at once while the kit's closed
   held.on = true;
   const superseded = wire.call("session.superseded", {}).catch(() => {});
   while (!peer.terminal) await new Promise((resolve) => setTimeout(resolve, 5));
-  await assert.rejects(peer.ready(), /superseded/);
-  await assert.rejects(peer.action("list", {}), /superseded/);
+  const displaced = (error) => error.message === "Sessionbus: another kilo-peer launch took over this session (superseded); relaunch to use Sessionbus here"
+    && error.code === -32012 && error.cause?.message === "superseded";
+  await assert.rejects(peer.ready(), displaced);
+  await assert.rejects(peer.action("list", {}), displaced);
   assert.equal(peer.signal.aborted, false, "the kit's closed is still pending");
   held.on = false;
   for (const release of held.parked.splice(0)) release();
   await superseded;
+  // Once the kit closes, the owner is disposed with the same text.
+  while (!peer.signal.aborted) await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.ok(displaced(peer.signal.reason));
+  await assert.rejects(peer.ready(), displaced);
+  await assert.rejects(peer.action("list", {}), displaced);
 });
