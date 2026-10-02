@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -900,30 +901,80 @@ func TestLaneSteerAnsweredBeforeTheTerminalIsWithdrawnOnceByTheRun(t *testing.T)
 // An interrupt call that fails after native already ended the Run keeps it
 // cancelled, so a steer answering later is still withdrawn.
 func TestLaneInterruptErrorAfterTheTerminalKeepsTheRunCancelled(t *testing.T) {
-	release := make(chan struct{})
-	var once sync.Once
-	unblock := func() { once.Do(func() { close(release) }) }
+	release, failed, again := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var unblockOnce, failOnce, againOnce sync.Once
+	unblock := func() { unblockOnce.Do(func() { close(release) }) }
+	fail := func() { failOnce.Do(func() { close(failed) }) }
+	var calls atomic.Int32
 	f := newLaneFixture(t, kit.OpenOptions{}, "", func(n *fakeNative) {
 		n.holds["late"] = func(w http.ResponseWriter) {
 			<-release
 			json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{}})
 		}
 		n.halt = func() int {
-			// The Run ends and takes its snapshot before the call fails.
+			if calls.Add(1) > 1 {
+				// A duplicate call (the Run's post-admission one): both calls
+				// succeed, so neither holds the Run and no error precedes the
+				// terminal. Limit: in the rare iteration where the Run's own call
+				// arrives first, no error is returned in that iteration, so the
+				// error-after-terminal branch is not exercised there; the contrast
+				// test covers the failing duplicate.
+				againOnce.Do(func() { close(again) })
+				return 0
+			}
+			// Native ends the execution as a user interrupt; the call fails only
+			// once the test has seen the Run end on that terminal.
 			n.emit("session.execution.interrupted", map[string]any{"sessionID": "ses_lane", "reason": "user"})
-			time.Sleep(300 * time.Millisecond)
-			return http.StatusBadGateway
+			select {
+			case <-failed:
+				return http.StatusBadGateway
+			case <-again:
+				return 0
+			}
 		}
 	})
 	t.Cleanup(unblock)
+	t.Cleanup(fail)
 	own := f.start(t, 1, "task")
 	delivered(f.native, own)
 	receipt := f.deliver(t, "late")
 	late := f.prompt(t, "late")
-	f.interrupt(t)
+	interrupt := f.begin(t, "turn.interrupt", protocol.SessionTarget{SessionID: "ses_lane@local"})
+	// The Run ends at that terminal and withdraws the steer it still tracks...
+	if status := f.status(t, "turn.wait", 1); status.State != "done" || status.Result == nil || status.Result.Outcome != "interrupted" {
+		t.Fatalf("status = %+v", status)
+	}
+	if got := f.native.withdrawn(); !slices.Equal(got, []string{late}) {
+		t.Fatalf("withdrawn at the terminal = %q", got)
+	}
+	// ...the interrupt call then fails...
+	fail()
+	if frame := f.answer(t, interrupt); frame.Error != nil {
+		t.Fatalf("interrupt: %+v", frame.Error)
+	}
+	// ...and the steer answered after that terminal withdraws itself.
 	unblock()
 	f.answer(t, receipt)
 	if got := f.native.withdrawn(); !slices.Equal(got, []string{late, late}) {
+		t.Fatalf("withdrawn = %q", got)
+	}
+}
+
+// The interrupt call can fail before native's terminal arrives; a user
+// interrupt terminal still withdraws the Run's undelivered steers.
+func TestLaneInterruptErrorBeforeTheTerminalStillWithdraws(t *testing.T) {
+	f := newLaneFixture(t, kit.OpenOptions{}, "", func(n *fakeNative) { n.halt = func() int { return http.StatusBadGateway } })
+	own := f.start(t, 1, "task")
+	delivered(f.native, own)
+	receipt := f.deliver(t, "pending")
+	pending := f.prompt(t, "pending")
+	f.answer(t, receipt)
+	f.interrupt(t)
+	f.native.emit("session.execution.interrupted", map[string]any{"sessionID": "ses_lane", "reason": "user"})
+	if status := f.status(t, "turn.wait", 1); status.State != "done" || status.Result == nil || status.Result.Outcome != "interrupted" {
+		t.Fatalf("status = %+v", status)
+	}
+	if got := f.native.withdrawn(); !slices.Equal(got, []string{pending}) {
 		t.Fatalf("withdrawn = %q", got)
 	}
 }

@@ -84,12 +84,19 @@ After SIGKILL of a lane worker, its lane tool socket under
 
 Evidence: RESULTS-S5-LANES.md (A2 and its precision), RESULTS-LANES-KILO.md (A2 RCA), LANE-SOCKET-NOTE-1.md.
 
-## 5. OpenCode interactive: topology flags are not refused
+## 5. OpenCode interactive: topology flags
 
-- `opencode-peer --standalone` starts the native TUI with its own private server instead of the user's background OpenCode service.
-- `opencode-peer --server <url>` passes straight to native, which connects to the supplied endpoint instead.
+- **Up to 5e6c451:**
+  - `opencode-peer --standalone` started the native TUI with its own private server instead of the user's background OpenCode service;
+  - `opencode-peer --server <url>` passed straight to native, which connected to the supplied endpoint instead.
 
-Evidence: RESULTS-S6.md.
+  Evidence: RESULTS-S6.md.
+- **Since 9d8bdeb (owner: strip and launch):**
+  - a managed launch drops `--standalone` (any spelling) and `--server` with its value before `--`, and starts normally on the shared service;
+  - the launch does not fail and prints nothing about it.
+  - Live, each of `--standalone`, `--server <url>` and `--server=<url>` started the native TUI without the flag, with its session on the bus and in the shared service. A normal launch was unchanged.
+
+  Evidence: RESULTS-OC-STRIP-TOPOLOGY.md, RESULTS-OC-STRIP-TOPOLOGY-SERVEREQ.md.
 
 ## 6. Kilo: no detection of a missing native hook
 
