@@ -61,12 +61,10 @@ A second `kilo-peer` launch takes over the same Sessionbus identity.
   - in the L2 test, the displaced owner sends no second hello after a native session update.
 
   Evidence: RESULTS-KILO-A6-DISPLACED.md.
-- **Still observed:** the only text the user and model see is the bare word `superseded`.
-  - The TUI shows the tool line without an error mark.
-  - The model reported it as "the literal string superseded" with "no error text".
-  - Nothing says that another launch took the session over or that a relaunch is needed.
-
-  Evidence: RESULTS-KILO-A6-DISPLACED.md.
+- **Error text:**
+  - Up to 5e6c451 it was only the bare word `superseded`. The model reported it as "the literal string superseded" with "no error text" (RESULTS-KILO-A6-DISPLACED.md).
+  - Since f40cf10 a displaced Kilo session's tool call fails with the owner-approved text "Sessionbus: another kilo-peer launch took over this session (superseded); relaunch to use Sessionbus here". Live, it showed on the TUI and the model repeated it (RESULTS-KILO-SUPERSEDED-TEXT.md).
+  - OpenCode keeps the kit's `superseded`, because the sentence would name the wrong launcher there. A second `opencode-peer` on the same session does not supersede (entry 10).
 - **Accepted limit (PR #19):**
   - each session displaced in a TUI keeps one of that TUI's 128 owner slots until the session is deleted natively or the TUI exits;
   - a new distinct session beyond the allowance is refused with "Sessionbus native owner limit reached";
@@ -134,6 +132,11 @@ Evidence: RESULTS-S4-KILO.md (A8b); RESULTS-I1-C.md (OpenCode).
 ## 10. Other recorded observations
 
 - **Kilo lane with an invalid model:** the Run ends `unavailable` with reason "Kilo POST /session/…/message returned HTTP 500" instead of native's model error. It reports no fabricated success. Evidence: RESULTS-S4-LANES.md (A4).
+- **OpenCode, the same session opened twice:**
+  - a second `opencode-peer -s <session> -n <name>` reuses the shared service's Sessionbus peer, so it does not supersede;
+  - its `-n` renames the shared session on the bus and in native.
+
+  Evidence: RESULTS-OC-SAME-SESSION.md.
 - **Kilo plugin off and on in the native plugin manager:**
   - toggling `@sessionbus/kilo` off removes the session's row;
   - toggling it back on leaves the plugin `inactive`, because the launch's claim refuses a second start in the same launch;
