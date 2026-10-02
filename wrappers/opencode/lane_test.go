@@ -913,19 +913,24 @@ func TestLaneInterruptErrorAfterTheTerminalKeepsTheRunCancelled(t *testing.T) {
 		}
 		n.halt = func() int {
 			if calls.Add(1) > 1 {
-				// The Run's own post-admission call: answered at once, and the
-				// first is released so neither holds the Run.
+				// A duplicate call (the Run's post-admission one): both calls
+				// succeed, so neither holds the Run and no error precedes the
+				// terminal. Limit: in the rare iteration where the Run's own call
+				// arrives first, no error is returned in that iteration, so the
+				// error-after-terminal branch is not exercised there; the contrast
+				// test covers the failing duplicate.
 				againOnce.Do(func() { close(again) })
-				return http.StatusBadGateway
+				return 0
 			}
 			// Native ends the execution as a user interrupt; the call fails only
-			// once the lane has ended the Run on that terminal.
+			// once the test has seen the Run end on that terminal.
 			n.emit("session.execution.interrupted", map[string]any{"sessionID": "ses_lane", "reason": "user"})
 			select {
 			case <-failed:
+				return http.StatusBadGateway
 			case <-again:
+				return 0
 			}
-			return http.StatusBadGateway
 		}
 	})
 	t.Cleanup(unblock)
