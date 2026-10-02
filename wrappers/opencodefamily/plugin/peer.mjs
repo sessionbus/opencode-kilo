@@ -3,6 +3,7 @@
 import net from "node:net";
 import { connectPeer } from "@sessionbus/kit";
 import { ReadyGate } from "./gate.mjs";
+import { nativeProduct } from "./profile.mjs";
 
 // Keep the kit's reconnect/hello policy. This owner only binds its attempt
 // observations and actual sockets/timers to the native session's lifetime.
@@ -63,7 +64,14 @@ export class OwnedPeer {
 
   // A terminal kit peer (superseded, or its hello refused) never becomes ready
   // again, even while its closed is still pending; its reason ends the waits.
-  #ended() { return this.#peer.terminal ? this.#peer.error || new Error("Sessionbus peer closed") : undefined; }
+  #ended() {
+    if (!this.#peer.terminal) return undefined;
+    const error = this.#peer.error || new Error("Sessionbus peer closed");
+    // The owner-approved text for a Kilo session another launch took over
+    // (2026-10-02). Kilo only: on OpenCode it would name the wrong launcher.
+    if (nativeProduct.product !== "kilo" || error.code !== -32012) return error;
+    return Object.assign(new Error("Sessionbus: another kilo-peer launch took over this session (superseded); relaunch to use Sessionbus here", { cause: error }), { code: error.code });
+  }
 
   #live() {
     const peer = this.#peer;
