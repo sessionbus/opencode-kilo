@@ -243,4 +243,9 @@ test("a superseded peer rejects ready and actions at once while the kit's closed
   held.on = false;
   for (const release of held.parked.splice(0)) release();
   await superseded;
+  // Once the kit closes, the owner is disposed with the same text.
+  while (!peer.signal.aborted) await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.ok(displaced(peer.signal.reason));
+  await assert.rejects(peer.ready(), displaced);
+  await assert.rejects(peer.action("list", {}), displaced);
 });

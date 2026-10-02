@@ -56,7 +56,7 @@ export class OwnedPeer {
     this.#observe();
     // A permanent hello refusal never resolves kit.ready; kit.closed is its
     // terminal boundary. Exactly one subscriber exists for the owner's life.
-    void this.#peer.closed.then(() => this.dispose(this.#peer.error || new Error("Sessionbus peer closed")));
+    void this.#peer.closed.then(() => this.dispose(this.#ended() || new Error("Sessionbus peer closed")));
   }
 
   get signal() { return this.#controller.signal; }
