@@ -109,7 +109,7 @@ func testNativePackageBoundary(t *testing.T, product string) {
 	if manifest.Repository.Type != "git" || manifest.Repository.URL != "git+https://github.com/sessionbus/opencode-kilo.git" || manifest.Repository.Directory != product {
 		t.Errorf("Native repository metadata is invalid: %#v", manifest.Repository)
 	}
-	if len(manifest.Dependencies) != 1 || manifest.Dependencies["@sessionbus/kit"] != "0.5.9" || strings.HasPrefix(manifest.Dependencies["@sessionbus/kit"], "file:") {
+	if len(manifest.Dependencies) != 1 || manifest.Dependencies["@sessionbus/kit"] != "0.5.10" || strings.HasPrefix(manifest.Dependencies["@sessionbus/kit"], "file:") {
 		t.Errorf("Native kit dependency is not exact: %q", manifest.Dependencies["@sessionbus/kit"])
 	}
 	workflow := read(t, ".github/workflows/pkg-pr-new.yml")

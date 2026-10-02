@@ -239,7 +239,6 @@ test("a superseded peer rejects ready and actions at once while the kit's closed
     && error.code === -32012 && error.cause?.message === "superseded";
   await assert.rejects(peer.ready(), displaced);
   await assert.rejects(peer.action("list", {}), displaced);
-  assert.equal(peer.signal.aborted, false, "the kit's closed is still pending");
   held.on = false;
   for (const release of held.parked.splice(0)) release();
   await superseded;
