@@ -96,7 +96,8 @@ remains native; no wrapper history, result journal or restart recovery is added.
 
 `opencode-peer` replaces itself with the native TUI, which uses your background
 OpenCode service as usual. The Sessionbus attachment lives in that service's
-plugin, not in a separate process. Sessionbus launch variables are scrubbed
+plugin, not in a separate process, so `opencode-peer` ignores `--standalone` and
+`--server` (with its value) before `--`, and the TUI always starts on that service. Sessionbus launch variables are scrubbed
 before native starts. Local-key Sessionbus transport is unsupported and fails
 before managed launch. Signals and TUI exit end only the TUI; its session stays
 on the bus until native deletes or unloads it, as above.
