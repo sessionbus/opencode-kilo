@@ -947,10 +947,17 @@ func TestLaneInterruptErrorAfterTheTerminalKeepsTheRunCancelled(t *testing.T) {
 	if got := f.native.withdrawn(); !slices.Equal(got, []string{late}) {
 		t.Fatalf("withdrawn at the terminal = %q", got)
 	}
-	// ...the interrupt call then fails...
+	// ...the interrupt call then fails, and the SDK reports that failure (in
+	// the rare iteration described above its call succeeds and answers {})...
 	fail()
-	if frame := f.answer(t, interrupt); frame.Error != nil {
+	frame := f.answer(t, interrupt)
+	if frame.Error != nil && (frame.Error.Code != protocol.Internal || !strings.Contains(string(frame.Error.Data), "product interrupt failed")) {
 		t.Fatalf("interrupt: %+v", frame.Error)
+	}
+	// {} is accepted only when a duplicate native interrupt call succeeded;
+	// the count does not show which of the concurrent calls that was.
+	if frame.Error == nil && calls.Load() < 2 {
+		t.Fatal("interrupt answered {} although no duplicate native call succeeded")
 	}
 	// ...and the steer answered after that terminal withdraws itself.
 	unblock()
@@ -969,7 +976,10 @@ func TestLaneInterruptErrorBeforeTheTerminalStillWithdraws(t *testing.T) {
 	receipt := f.deliver(t, "pending")
 	pending := f.prompt(t, "pending")
 	f.answer(t, receipt)
-	f.interrupt(t)
+	// The SDK reports the failed product interrupt.
+	if frame := f.answer(t, f.begin(t, "turn.interrupt", protocol.SessionTarget{SessionID: "ses_lane@local"})); frame.Error == nil || frame.Error.Code != protocol.Internal || !strings.Contains(string(frame.Error.Data), "product interrupt failed") {
+		t.Fatalf("interrupt: %+v", frame.Error)
+	}
 	f.native.emit("session.execution.interrupted", map[string]any{"sessionID": "ses_lane", "reason": "user"})
 	if status := f.status(t, "turn.wait", 1); status.State != "done" || status.Result == nil || status.Result.Outcome != "interrupted" {
 		t.Fatalf("status = %+v", status)
