@@ -34,6 +34,6 @@
     "directory": "opencode"
   },
   "dependencies": {
-    "@sessionbus/kit": "0.5.10"
+    "@sessionbus/kit": "0.5.12"
   }
 }
