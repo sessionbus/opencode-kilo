@@ -950,8 +950,14 @@ func TestLaneInterruptErrorAfterTheTerminalKeepsTheRunCancelled(t *testing.T) {
 	// ...the interrupt call then fails, and the SDK reports that failure (in
 	// the rare iteration described above its call succeeds and answers {})...
 	fail()
-	if frame := f.answer(t, interrupt); frame.Error != nil && (frame.Error.Code != protocol.Internal || !strings.Contains(string(frame.Error.Data), "product interrupt failed")) {
+	frame := f.answer(t, interrupt)
+	if frame.Error != nil && (frame.Error.Code != protocol.Internal || !strings.Contains(string(frame.Error.Data), "product interrupt failed")) {
 		t.Fatalf("interrupt: %+v", frame.Error)
+	}
+	// {} is accepted only when a duplicate native interrupt call succeeded;
+	// the count does not show which of the concurrent calls that was.
+	if frame.Error == nil && calls.Load() < 2 {
+		t.Fatal("interrupt answered {} although no duplicate native call succeeded")
 	}
 	// ...and the steer answered after that terminal withdraws itself.
 	unblock()
