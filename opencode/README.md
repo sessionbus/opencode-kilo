@@ -107,6 +107,10 @@ background OpenCode service, as native `opencode run` is: your logins, history
 and default model apply. A lane never stops the service. A service restart ends
 the lane's running Run (reported unavailable), after which OpenCode may continue
 that turn by itself; killing a lane worker does not stop a turn already running.
+A lane worker that is killed without closing leaves its tool socket file in the
+Sessionbus runtime directory; the next OpenCode or Kilo lane worker to start on
+that host removes it. A worker killed during its own startup can leave a `t-`
+socket file there, which the next daemon start removes.
 A message to a busy lane reaches its current turn at the next model step. With
 no human present, permission asks and questions in a lane are declined with a
 message and the model continues, unless the lane was opened with
