@@ -155,6 +155,12 @@ func TestRequireManagedRegistrationRefusesOnlyPositiveAbsence(t *testing.T) {
 		"XDG_CONFIG_HOME wins":     {"HOME=" + t.TempDir(), "XDG_CONFIG_HOME=" + filepath.Join(home, ".config")},
 		"relative XDG_CONFIG_HOME": {"HOME=" + elsewhere, "XDG_CONFIG_HOME=relative"},
 		"no HOME":                  {"PATH=/usr/bin"},
+		// Native strips CR and LF from the root, so these name the registered
+		// directory to native and an empty one to a raw read.
+		"newline in XDG_CONFIG_HOME":         {"HOME=" + elsewhere, "XDG_CONFIG_HOME=" + filepath.Join(home, ".config") + "\n"},
+		"carriage return in XDG_CONFIG_HOME": {"HOME=" + elsewhere, "XDG_CONFIG_HOME=" + filepath.Join(home, ".config") + "\r"},
+		"newline in HOME":                    {"HOME=" + home + "\n"},
+		"carriage return inside HOME":        {"HOME=" + filepath.Dir(home) + "\r/" + filepath.Base(home)},
 	} {
 		if err := requireManagedRegistration(kiloNative, "Kilo", env); err != nil {
 			t.Fatalf("%s: %v", name, err)

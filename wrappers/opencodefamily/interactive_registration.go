@@ -155,7 +155,9 @@ func nativePluginFiles(directory string) bool {
 }
 
 // nativeGlobalConfigDirectory resolves the directory as the native child will,
-// from the child's environment. Empty means it cannot be determined here.
+// from the child's environment. Empty means it cannot be determined here:
+// native strips CR and LF from the root before using it, so a root carrying
+// one names a different directory than the raw value does.
 func nativeGlobalConfigDirectory(kind nativeKind, environment []string) string {
 	root := InteractiveEnvironmentValue(environment, "XDG_CONFIG_HOME")
 	if root == "" {
@@ -165,7 +167,7 @@ func nativeGlobalConfigDirectory(kind nativeKind, environment []string) string {
 		}
 		root = filepath.Join(home, ".config")
 	}
-	if !filepath.IsAbs(root) {
+	if !filepath.IsAbs(root) || strings.ContainsAny(root, "\r\n") {
 		return ""
 	}
 	return filepath.Join(root, kind.name())

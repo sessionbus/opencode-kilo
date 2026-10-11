@@ -65,16 +65,20 @@ func TestCompiledKiloLauncherRequiresThePluginRegistration(t *testing.T) {
 		name    string
 		files   map[string]string
 		missing string // empty: the native must be started
+		xdg     string // appended to this case's own .config path as XDG_CONFIG_HOME
 	}{
-		{"no config directory", nil, "server and TUI"},
-		{"both lists without ours", map[string]string{"kilo.jsonc": `{"plugin":["somebody-else"]}`, "tui.jsonc": `{}`}, "server and TUI"},
-		{"tui list without ours", map[string]string{"kilo.jsonc": registeredPlugin, "tui.jsonc": `{"plugin":[]}`}, "TUI"},
-		{"server list without ours", map[string]string{"kilo.jsonc": `{}`, "tui.jsonc": registeredPlugin}, "server"},
-		{"plugin file but no TUI entry", map[string]string{"plugins/agent.js": "export default {}\n"}, "TUI"},
-		{"unparsable files", map[string]string{"kilo.jsonc": `{ "plugin": [`, "tui.jsonc": `{`}, ""},
-		{"env token entries", map[string]string{"kilo.jsonc": `{"plugin":["{env:OWNED}"]}`, "tui.jsonc": `{"plugin":["{env:OWNED}"]}`}, ""},
-		{"plugin file and TUI entry", map[string]string{"plugins/agent.js": "export default {}\n", "tui.jsonc": registeredPlugin}, ""},
-		{"both registered", map[string]string{"kilo.jsonc": registeredPlugin, "tui.jsonc": registeredPlugin}, ""},
+		{name: "no config directory", missing: "server and TUI"},
+		{name: "both lists without ours", files: map[string]string{"kilo.jsonc": `{"plugin":["somebody-else"]}`, "tui.jsonc": `{}`}, missing: "server and TUI"},
+		{name: "tui list without ours", files: map[string]string{"kilo.jsonc": registeredPlugin, "tui.jsonc": `{"plugin":[]}`}, missing: "TUI"},
+		{name: "server list without ours", files: map[string]string{"kilo.jsonc": `{}`, "tui.jsonc": registeredPlugin}, missing: "server"},
+		{name: "plugin file but no TUI entry", files: map[string]string{"plugins/agent.js": "export default {}\n"}, missing: "TUI"},
+		{name: "unparsable files", files: map[string]string{"kilo.jsonc": `{ "plugin": [`, "tui.jsonc": `{`}},
+		{name: "env token entries", files: map[string]string{"kilo.jsonc": `{"plugin":["{env:OWNED}"]}`, "tui.jsonc": `{"plugin":["{env:OWNED}"]}`}},
+		{name: "plugin file and TUI entry", files: map[string]string{"plugins/agent.js": "export default {}\n", "tui.jsonc": registeredPlugin}},
+		{name: "both registered", files: map[string]string{"kilo.jsonc": registeredPlugin, "tui.jsonc": registeredPlugin}},
+		// Native strips the newline and reads the registered directory; a raw
+		// read of the child's value would find an empty one.
+		{name: "registered under a root native cleans", files: map[string]string{"kilo.jsonc": registeredPlugin, "tui.jsonc": registeredPlugin}, xdg: "\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			home := t.TempDir()
@@ -95,6 +99,9 @@ func TestCompiledKiloLauncherRequiresThePluginRegistration(t *testing.T) {
 			var stderr bytes.Buffer
 			command.Stderr = &stderr
 			command.Env = []string{"PATH=" + bin, "HOME=" + home, "SESSIONBUS_SOCKET=" + filepath.Join(directory, "bus.sock"), "KILO_TEST_SOCKET=" + listener.Addr().String(), "KILO_TEST_MODE=exit"}
+			if tc.xdg != "" {
+				command.Env = append(command.Env, "HOME="+t.TempDir(), "XDG_CONFIG_HOME="+filepath.Join(home, ".config")+tc.xdg)
+			}
 			runErr := command.Run()
 			// The fake native connects before it exits, and the launcher joins it, so a
 			// started native has a connection waiting here.
