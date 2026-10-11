@@ -248,11 +248,10 @@ func ownedInstallSpecifier(kind nativeKind, spec, configFile string) bool {
 	if spec == pkg || strings.HasPrefix(spec, pkg+"@") && !strings.ContainsAny(spec, " \t\r\n") && len(spec) > len(pkg+"@") {
 		return true
 	}
-	location := strings.FieldsFunc(spec, func(r rune) bool { return r == '?' || r == '#' })
-	if len(location) == 0 {
+	clean := specifierLocation(spec)
+	if clean == "" {
 		return false
 	}
-	clean := strings.ReplaceAll(location[0], "\\", "/")
 	name := filepath.Base(clean)
 	if strings.HasPrefix(name, archive) && strings.HasSuffix(name, ".tgz") && len(name) > len(archive+".tgz") {
 		return true
@@ -260,14 +259,38 @@ func ownedInstallSpecifier(kind nativeKind, spec, configFile string) bool {
 	if !strings.HasPrefix(clean, "file:") {
 		return false
 	}
-	u, err := url.Parse(clean)
+	manifest, known := filePackageName(clean, configFile)
+	return known && manifest == pkg
+}
+
+// specifierLocation is a specifier without its query or fragment, with
+// forward slashes. Empty means the specifier has no location part.
+func specifierLocation(spec string) string {
+	location := strings.FieldsFunc(spec, func(r rune) bool { return r == '?' || r == '#' })
+	if len(location) == 0 {
+		return ""
+	}
+	return strings.ReplaceAll(location[0], "\\", "/")
+}
+
+// filePackageName returns the manifest name of the local package a file:
+// location points at. known is false when the location is not a local file URL
+// or its manifest cannot be read or parsed.
+func filePackageName(location, configFile string) (name string, known bool) {
+	u, err := url.Parse(location)
 	if err != nil || u.Host != "" && u.Host != "localhost" {
-		return false
+		return "", false
 	}
 	target := u.Path
 	if u.Opaque != "" {
 		target = u.Opaque
 	}
+	return directoryPackageName(target, configFile)
+}
+
+// directoryPackageName reads <target>/package.json; a relative target is
+// relative to the config file that names it.
+func directoryPackageName(target, configFile string) (name string, known bool) {
 	if !filepath.IsAbs(target) {
 		target = filepath.Join(filepath.Dir(configFile), target)
 	}
@@ -275,7 +298,10 @@ func ownedInstallSpecifier(kind nativeKind, spec, configFile string) bool {
 	var manifest struct {
 		Name string `json:"name"`
 	}
-	return err == nil && json.Unmarshal(body, &manifest) == nil && manifest.Name == pkg
+	if err != nil || json.Unmarshal(body, &manifest) != nil {
+		return "", false
+	}
+	return manifest.Name, true
 }
 
 func installableSpecifier(kind nativeKind, spec, directory string) bool {
