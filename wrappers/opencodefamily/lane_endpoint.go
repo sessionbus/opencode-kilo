@@ -4,8 +4,12 @@ package opencodefamily
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/sessionbus/peer-common/host"
@@ -38,8 +42,41 @@ type laneToolOwner struct {
 	initialized bool
 }
 
+// laneKeyLength is the length of a lane tool socket key. Both lane key
+// generators yield exactly this many lowercase hex characters, and only names
+// of this shape are treated as this family's published lane tool sockets.
+const laneKeyLength = 24
+
+// laneKey reports whether value has the published lane tool socket key shape.
+func laneKey(value string) bool {
+	return len(value) == laneKeyLength && strings.Trim(value, "0123456789abcdef") == ""
+}
+
+// listenLaneSocket publishes a lane tool socket under its key only once it
+// listens: it is created under a temporary name outside the key shape and then
+// renamed. On Linux a socket of the key shape that refuses a connection
+// therefore belongs to a worker of this build that is gone, which is what
+// removeDeadLaneSockets relies on. Older builds bound the key name directly;
+// none may be starting a lane when this build first runs.
+func listenLaneSocket(socket, key string) (*host.PrivateEndpoint, error) {
+	if !laneKey(key) {
+		return nil, errors.New("lane tool socket key is invalid")
+	}
+	removeDeadLaneSockets(socket)
+	l, err := host.ListenPrivate(socket, "t-"+key[2:])
+	if err != nil {
+		return nil, err
+	}
+	published := filepath.Join(filepath.Dir(l.Path), key+".sock")
+	if err = os.Rename(l.Path, published); err != nil {
+		return nil, errors.Join(err, l.Close())
+	}
+	l.Path = published
+	return l, nil
+}
+
 func newLaneEndpoint(owner LaneToolHost, socket, key, product, title string) (*laneEndpoint, error) {
-	l, e := host.ListenPrivate(socket, key)
+	l, e := listenLaneSocket(socket, key)
 	if e != nil {
 		return nil, e
 	}
