@@ -75,6 +75,36 @@ tool takes exactly `action` and `arguments`. Native sub-agent (task) sessions
 are never peers of their own: where OpenCode lets one use the tool, it speaks
 as the managed session or lane it descends from.
 
+OpenCode reloads this plugin inside its running service when the plugin's files
+change, as an install of this package can, or when a plugin that is set up
+before it changes. The plugin then hands what it held to its new instance:
+- A managed interactive session leaves the bus and is meant to join it again
+  with no relaunch, under the same ID and groups and the bus name it had. A
+  session that had no bus name comes back under its current title if that
+  title is a valid bus name. The rejoin can fail, for example when the bus refuses
+  the session. The session is then off the bus and its TUI shows nothing; the
+  bus list shows that it is missing. It needs a new activation, for example a
+  new `opencode-peer` launch of that session.
+- A lane's row belongs to its worker and stays on the bus. Only the connection
+  that carries the lane session's Sessionbus tool is made again, and that tool
+  can fail until it is.
+- A message being handed over to an interactive session at that moment has an
+  uncertain outcome and is never replayed. A send to it while it is away is
+  refused.
+- A Sessionbus tool call pending at that moment, from a managed session or a
+  lane, can fail. What it had already attempted is uncertain, and it is not
+  repeated. An interactive session has no Sessionbus tool while it is away.
+- The hand-off needs the outgoing plugin to be a build that has it. The install
+  that first brings such a build still takes the sessions off the bus, and
+  nothing is handed over. A session whose TUI is open can still be activated
+  again by that TUI, at its next reconnect or when OpenCode loads its directory
+  again after an unload, as before.
+- It does not reach across an unload: a session whose directory OpenCode
+  unloads leaves the bus as described above.
+- Read in the OpenCode 2.0.21 source: it does not load the Sessionbus kit again
+  on such a reload. After an install that brings a new kit, the running service
+  would keep the kit it loaded first until the service is restarted.
+
 Lane model selection follows native configuration. A caller can set an explicit
 `open.model` such as `"google/gemini-3.1-pro-preview"` in a spawn request. A lane
 does not implicitly inherit the displayed TUI model, and the wrapper never
