@@ -341,6 +341,537 @@ test("server: a lane's connection end releases only its own binding; deletion cl
   await assert.rejects(ctx.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_l", messageID: "msg_3" }), /not active/u);
 });
 
+// A native plugin reload: native runs the old instance's cleanup, then the new
+// setup, in the same loaded directory, whose ctx.location object is the same.
+function reloaded(t, previous) {
+  const ctx = serverContext(t);
+  ctx.location = previous.location;
+  return ctx;
+}
+// What the instances of a loaded directory have left for the next one.
+const handoffRecords = (ctx) => globalThis[Symbol.for("sessionbus.opencode.handoff.v1")].get(ctx.location);
+
+test("server: a reload attaches the previous instance's sessions again, same identity, with no activation", async (t) => {
+  const first = fakePeers(), second = fakePeers();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer: first.peer })(ctx);
+  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"], name: "worker" });
+  await ctx.handlers.activate({ sessionID: "ses_b", socket: "/other.sock", groups: [] });
+  await cleanup();
+  assert.ok(first.peers.every((value) => value.disposed));
+  const next = reloaded(t, ctx);
+  const cleanupNext = await createServer({ peer: second.peer })(next);
+  await flush(); await flush();
+  assert.equal(second.peers.length, 2);
+  assert.deepEqual(second.peers[0].identity, { product: "opencode-peer", session_id: "ses_a", groups: ["team"], info: { cwd: "/work" }, name: "worker" });
+  assert.deepEqual(second.peers[0].env, { SESSIONBUS_SOCKET: "/bus.sock" });
+  assert.deepEqual(second.peers[1].identity, { product: "opencode-peer", session_id: "ses_b", groups: [], info: { cwd: "/work" }, name: "native title" });
+  assert.deepEqual(second.peers[1].env, { SESSIONBUS_SOCKET: "/other.sock" });
+  // The new instance delivers and serves the tool for it.
+  assert.deepEqual(await second.peers[0].deliver(undefined, message), { disposition: "injected" });
+  assert.equal(next.prompts.length, 1); assert.equal(ctx.prompts.length, 0);
+  assert.deepEqual(await next.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_a" }), { content: '{"ok":true}' });
+  // A TUI that activates it now finds the Peer; a third instance gets it again.
+  assert.deepEqual(await next.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] }), {});
+  assert.equal(second.peers.length, 2);
+  await cleanupNext();
+  const third = fakePeers();
+  await createServer({ peer: third.peer })(reloaded(t, next));
+  await flush(); await flush();
+  assert.deepEqual(third.peers.map((value) => value.identity.session_id).sort(), ["ses_a", "ses_b"]);
+});
+
+test("server: nothing is handed over to another loaded directory, or to the same one after an unload", async (t) => {
+  const first = fakePeers(), second = fakePeers();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer: first.peer })(ctx);
+  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] });
+  await cleanup();
+  // After an unload native builds a new location object for the directory.
+  await createServer({ peer: second.peer })(serverContext(t));
+  await flush(); await flush();
+  assert.equal(second.peers.length, 0);
+});
+
+test("server: a session that left before the reload is not attached again", async (t) => {
+  const first = fakePeers(), second = fakePeers();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer: first.peer })(ctx);
+  for (const sessionID of ["ses_deleted", "ses_ended", "ses_kept"]) await ctx.handlers.activate({ sessionID, socket: "/bus.sock", groups: [] });
+  ctx.publish({ type: "session.deleted", data: { sessionID: "ses_deleted" } });
+  for (let i = 0; i < 5 && !first.peers[0].disposed; i++) await flush();
+  // The bus ended this Peer for good while the instance was live.
+  await first.peers[1].dispose();
+  await cleanup();
+  await createServer({ peer: second.peer })(reloaded(t, ctx));
+  await flush(); await flush();
+  assert.deepEqual(second.peers.map((value) => value.identity.session_id), ["ses_kept"]);
+});
+
+test("server: a rename is handed over; a title the bus name grammar refuses keeps the old name", async (t) => {
+  const first = fakePeers(), second = fakePeers();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer: first.peer })(ctx);
+  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: [], name: "worker" });
+  ctx.publish({ type: "session.renamed", data: { sessionID: "ses_a", title: "renamed" } });
+  for (let i = 0; i < 5 && !first.peers[0].renames.length; i++) await flush();
+  ctx.publish({ type: "session.renamed", data: { sessionID: "ses_a", title: "bad　title" } });
+  await flush(); await flush();
+  await cleanup();
+  await createServer({ peer: second.peer })(reloaded(t, ctx));
+  await flush(); await flush();
+  assert.equal(second.peers.length, 1);
+  assert.equal(second.peers[0].identity.name, "renamed");
+});
+
+test("server: a TUI activation racing the restore creates one Peer", async (t) => {
+  const first = fakePeers(), second = fakePeers();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer: first.peer })(ctx);
+  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] });
+  await cleanup();
+  const next = reloaded(t, ctx);
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  next.session.get = async ({ sessionID }) => { await gate; return { id: sessionID, title: "native title" }; };
+  await createServer({ peer: second.peer })(next);
+  // The restore is waiting on native's read; the TUI activates the same session.
+  const activation = next.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] });
+  await flush();
+  assert.equal(second.peers.length, 0);
+  release();
+  assert.deepEqual(await activation, {});
+  await flush(); await flush();
+  assert.equal(second.peers.length, 1);
+  assert.equal(second.peers[0].identity.session_id, "ses_a");
+});
+
+test("server: an instance cleaned up while its restore waits creates no Peer and leaves the record to the next", async (t) => {
+  const first = fakePeers(), second = fakePeers(), third = fakePeers();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer: first.peer })(ctx);
+  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"], name: "worker" });
+  await cleanup();
+  // Second instance: native's read is still pending when the next reload comes.
+  const middle = reloaded(t, ctx);
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  middle.session.get = async ({ sessionID }) => { await gate; return { id: sessionID, title: "native title" }; };
+  const cleanupMiddle = await createServer({ peer: second.peer })(middle);
+  // An activation in flight in that instance, as a TUI may have.
+  const activation = middle.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] });
+  await flush();
+  await cleanupMiddle();
+  const last = reloaded(t, middle);
+  await createServer({ peer: third.peer })(last);
+  await flush(); await flush();
+  assert.equal(third.peers.length, 1);
+  // Now the retired instance's reads settle.
+  release();
+  const answer = await activation;
+  await flush(); await flush();
+  assert.equal(second.peers.length, 0);
+  assert.equal(middle.updates.length, 0);
+  assert.equal(answer.rpcError?.type, "sessionbus.not_admitted");
+  assert.equal(third.peers.length, 1);
+  assert.equal(third.peers[0].disposed, false);
+  assert.equal(third.peers[0].identity.name, "worker");
+  // The record is still the live instance's: one more reload attaches it again.
+  const fourth = fakePeers();
+  await createServer({ peer: fourth.peer })(reloaded(t, last));
+  await flush(); await flush();
+  assert.equal(fourth.peers.length, 1);
+});
+
+test("server: a session native deletes while its restore waits is not attached, and its record goes", async (t) => {
+  const first = fakePeers(), second = fakePeers(), third = fakePeers();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer: first.peer })(ctx);
+  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] });
+  await cleanup();
+  const next = reloaded(t, ctx);
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  next.session.get = async ({ sessionID }) => { await gate; return { id: sessionID, title: "native title" }; };
+  const cleanupNext = await createServer({ peer: second.peer })(next);
+  // No Peer exists yet for it in this instance when native announces the deletion.
+  next.publish({ type: "session.deleted", data: { sessionID: "ses_a" } });
+  await flush(); await flush();
+  release();
+  await flush(); await flush();
+  assert.equal(second.peers.length, 0);
+  assert.equal(next.updates.length, 0);
+  await cleanupNext();
+  await createServer({ peer: third.peer })(reloaded(t, next));
+  await flush(); await flush();
+  assert.equal(third.peers.length, 0);
+  // The same while native writes the session's grant for the restore.
+  const before = fakePeers(), after = fakePeers();
+  const other = serverContext(t);
+  const cleanupOther = await createServer({ peer: before.peer })(other);
+  await other.handlers.activate({ sessionID: "ses_b", socket: "/bus.sock", groups: [] });
+  await cleanupOther();
+  const writing = reloaded(t, other);
+  let written;
+  const write = new Promise((resolve) => { written = resolve; });
+  writing.session.update = async () => { await write; };
+  await createServer({ peer: after.peer })(writing);
+  await flush();
+  writing.publish({ type: "session.deleted", data: { sessionID: "ses_b" } });
+  await flush(); await flush();
+  written();
+  await flush(); await flush();
+  assert.equal(after.peers.length, 0);
+  assert.equal(handoffRecords(writing).has("ses_b"), false);
+});
+
+test("server: a retained lane keeps its session against a TUI activation that arrives during setup", async (t) => {
+  const first = fakeForwarders(), second = fakeForwarders();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer: fakePeers().peer, forwarder: first.forwarder })(ctx);
+  await ctx.handlers.lane({ sessionID: "ses_l", socket: "/lane.sock" });
+  await cleanup();
+  const next = reloaded(t, ctx);
+  const peers = fakePeers();
+  // Native has the handlers as soon as they are registered; the rest of setup is still pending.
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const transform = next.tool.transform;
+  next.tool.transform = async (callback) => { await gate; return transform(callback); };
+  const setup = createServer({ peer: peers.peer, forwarder: second.forwarder })(next);
+  for (let i = 0; i < 5 && !next.handlers; i++) await flush();
+  const taken = await next.handlers.activate({ sessionID: "ses_l", socket: "/bus.sock", groups: [] });
+  assert.equal(taken.rpcError?.type, "sessionbus.conflict");
+  assert.equal(peers.peers.length, 0); assert.equal(second.forwards.length, 1);
+  release();
+  await setup;
+  // The worker's bind for its next Run finds that one binding.
+  assert.deepEqual(await next.handlers.lane({ sessionID: "ses_l", socket: "/lane.sock" }), {});
+  assert.equal(second.forwards.length, 1);
+  assert.deepEqual(await next.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_l", messageID: "msg_1" }), { content: '{"via":"/lane.sock"}' });
+});
+
+test("server: a session a TUI activated stays the TUI's against a lane bind while its restore waits", async (t) => {
+  const first = fakePeers(), second = fakePeers();
+  const forwards = fakeForwarders();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer: first.peer })(ctx);
+  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] });
+  await cleanup();
+  const next = reloaded(t, ctx);
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  next.session.get = async ({ sessionID }) => { await gate; return { id: sessionID, title: "native title" }; };
+  await createServer({ peer: second.peer, forwarder: forwards.forwarder })(next);
+  // Answered at once, without waiting for native's read.
+  const taken = await Promise.race([next.handlers.lane({ sessionID: "ses_a", socket: "/lane.sock" }), flush().then(flush).then(() => "still waiting")]);
+  release();
+  assert.equal(taken?.rpcError?.type, "sessionbus.conflict");
+  assert.equal(forwards.forwards.length, 0);
+  await flush(); await flush();
+  assert.equal(second.peers.length, 1);
+  assert.equal(second.peers[0].identity.session_id, "ses_a");
+});
+
+test("server: a setup that fails releases what it created and leaves the records to the next setup", async (t) => {
+  const first = fakePeers(), firstForwards = fakeForwarders();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer: first.peer, forwarder: firstForwards.forwarder })(ctx);
+  await ctx.handlers.lane({ sessionID: "ses_l", socket: "/lane.sock" });
+  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] });
+  await cleanup();
+  // The next setup: one of native's registrations is pending, then fails.
+  const failing = reloaded(t, ctx);
+  const second = fakePeers(), secondForwards = fakeForwarders();
+  let fail;
+  const gate = new Promise((_resolve, reject) => { fail = reject; });
+  failing.tool.transform = async () => { await gate; };
+  const setup = createServer({ peer: second.peer, forwarder: secondForwards.forwarder })(failing);
+  const outcome = setup.then(() => "returned", (error) => error);
+  for (let i = 0; i < 5 && !failing.handlers; i++) await flush();
+  // The retained lane is already bound in it.
+  assert.equal(secondForwards.forwards.length, 1);
+  assert.equal(secondForwards.forwards[0].disposed, false);
+  // Native serves a TUI's activation meanwhile.
+  assert.deepEqual(await failing.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] }), {});
+  assert.equal(second.peers.length, 1);
+  fail(new Error("registration failed"));
+  const error = await outcome;
+  assert.match(String(error?.message), /registration failed/u);
+  await flush(); await flush();
+  assert.equal(secondForwards.forwards.length, 1);
+  assert.equal(secondForwards.forwards[0].disposed, true);
+  assert.equal(second.peers.length, 1);
+  assert.equal(second.peers[0].disposed, true);
+  // Native falls back to the previous generation, whose setup runs again.
+  const third = fakePeers(), thirdForwards = fakeForwarders();
+  await createServer({ peer: third.peer, forwarder: thirdForwards.forwarder })(reloaded(t, failing));
+  await flush(); await flush();
+  assert.equal(thirdForwards.forwards.length, 1);
+  assert.equal(thirdForwards.forwards[0].socket, "/lane.sock"); assert.equal(thirdForwards.forwards[0].disposed, false);
+  assert.deepEqual(third.peers.map((value) => value.identity.session_id), ["ses_a"]);
+  assert.equal(third.peers[0].disposed, false);
+});
+
+test("server: an activation still in flight when its instance ends answers the transient error", async (t) => {
+  const { peers, peer } = fakePeers();
+  const ctx = serverContext(t);
+  // The bus has not admitted the session when the instance is cleaned up.
+  const waiting = (...args) => {
+    const value = peer(...args);
+    value.admission = (signal) => new Promise((_resolve, reject) => {
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      value.signal.addEventListener("abort", () => reject(new Error("native owner closed")), { once: true });
+    });
+    return value;
+  };
+  const cleanup = await createServer({ peer: waiting })(ctx);
+  const admission = ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: [] });
+  for (let i = 0; i < 5 && !peers.length; i++) await flush();
+  await cleanup();
+  assert.equal((await admission).rpcError?.type, "sessionbus.not_admitted");
+  assert.equal(peers[0].disposed, true);
+  // Native fails the call's read after the instance was cleaned up.
+  const other = serverContext(t);
+  let fail;
+  other.session.get = () => new Promise((_resolve, reject) => { fail = reject; });
+  const cleanupOther = await createServer({ peer })(other);
+  const read = other.handlers.activate({ sessionID: "ses_b", socket: "/bus.sock", groups: [] });
+  await flush();
+  await cleanupOther();
+  fail(new Error("location closed"));
+  assert.equal((await read).rpcError?.type, "sessionbus.not_admitted");
+  assert.equal(peers.length, 1);
+  // The instance is cleaned up while native writes the session's grant.
+  const third = serverContext(t);
+  let written;
+  const gate = new Promise((resolve) => { written = resolve; });
+  third.session.update = async () => { await gate; };
+  const cleanupThird = await createServer({ peer })(third);
+  const write = third.handlers.activate({ sessionID: "ses_c", socket: "/bus.sock", groups: [] });
+  await flush();
+  await cleanupThird();
+  written();
+  assert.equal((await write).rpcError?.type, "sessionbus.not_admitted");
+  assert.equal(peers.length, 1);
+});
+
+test("server: an instance that ended changes nothing for an event or a lane bind it had not finished", async (t) => {
+  const { peer } = fakePeers();
+  const forwards = fakeForwarders();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer, forwarder: forwards.forwarder })(ctx);
+  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: [] });
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const read = ctx.session.get;
+  ctx.session.get = async (input) => { await gate; return read(input); };
+  const binding = ctx.handlers.lane({ sessionID: "ses_l", socket: "/lane.sock" });
+  // Native announced a deletion, but the instance is cleaned up before it handles the event.
+  ctx.publish({ type: "session.deleted", data: { sessionID: "ses_a" } });
+  await cleanup();
+  release();
+  await assert.rejects(binding, /before this lane was bound/u);
+  await flush(); await flush();
+  assert.equal(forwards.forwards.length, 0);
+  assert.deepEqual([...handoffRecords(ctx).keys()], ["ses_a"]);
+});
+
+test("server: a rename the bus has not accepted, or that settles after the instance ended, is not handed over", async (t) => {
+  const errors = t.mock.method(console, "error", () => {});
+  const first = fakePeers(), second = fakePeers();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer: first.peer })(ctx);
+  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: [], name: "worker" });
+  // The bus refuses this one.
+  first.peers[0].rehello = async () => { throw new Error("name refused"); };
+  ctx.publish({ type: "session.renamed", data: { sessionID: "ses_a", title: "refused" } });
+  for (let i = 0; i < 5 && !errors.mock.calls.length; i++) await flush();
+  assert.equal(errors.mock.calls.length, 1);
+  assert.equal(handoffRecords(ctx).get("ses_a").name, "worker");
+  // This one is still pending when the instance is cleaned up.
+  let accept;
+  first.peers[0].rehello = () => new Promise((resolve) => { accept = resolve; });
+  ctx.publish({ type: "session.renamed", data: { sessionID: "ses_a", title: "late" } });
+  for (let i = 0; i < 5 && !accept; i++) await flush();
+  await cleanup();
+  accept();
+  await flush(); await flush();
+  assert.equal(handoffRecords(ctx).get("ses_a").name, "worker");
+  await createServer({ peer: second.peer })(reloaded(t, ctx));
+  await flush(); await flush();
+  assert.equal(second.peers[0].identity.name, "worker");
+  assert.equal(errors.mock.calls.length, 1);
+});
+
+test("server: a restore that fails after its instance ended, or after an activation took over, drops nothing", async (t) => {
+  const errors = t.mock.method(console, "error", () => {});
+  const first = fakePeers(), second = fakePeers(), third = fakePeers();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer: first.peer })(ctx);
+  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] });
+  await cleanup();
+  // Ended first: the failure belongs to no live instance.
+  const middle = reloaded(t, ctx);
+  let fail;
+  middle.session.get = () => new Promise((_resolve, reject) => { fail = reject; });
+  const cleanupMiddle = await createServer({ peer: second.peer })(middle);
+  await flush();
+  await cleanupMiddle();
+  fail(new Error("read failed"));
+  await flush(); await flush();
+  assert.equal(errors.mock.calls.length, 0);
+  assert.equal(handoffRecords(ctx).has("ses_a"), true);
+  // Live, but a TUI's activation attached the session while the restore's read was pending.
+  const last = reloaded(t, middle);
+  const read = last.session.get;
+  let reads = 0;
+  last.session.get = (input) => reads++ ? read(input) : new Promise((_resolve, reject) => { fail = reject; });
+  await createServer({ peer: third.peer })(last);
+  await flush();
+  assert.deepEqual(await last.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] }), {});
+  fail(new Error("read failed"));
+  await flush(); await flush();
+  assert.equal(errors.mock.calls.length, 1);
+  assert.equal(third.peers.length, 1); assert.equal(third.peers[0].disposed, false);
+  assert.equal(handoffRecords(ctx).has("ses_a"), true);
+});
+
+test("server: a record that cannot be attached is reported and dropped; setup still succeeds", async (t) => {
+  const first = fakePeers(), second = fakePeers(), third = fakePeers();
+  const errors = t.mock.method(console, "error", () => {});
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer: first.peer })(ctx);
+  await ctx.handlers.activate({ sessionID: "ses_gone", socket: "/bus.sock", groups: [] });
+  await ctx.handlers.activate({ sessionID: "ses_kept", socket: "/bus.sock", groups: [] });
+  await cleanup();
+  const next = reloaded(t, ctx);
+  next.session.get = async ({ sessionID }) => {
+    if (sessionID === "ses_gone") throw Object.assign(new Error("session not found"), { _tag: "SessionNotFoundError" });
+    return { id: sessionID, title: "native title" };
+  };
+  const cleanupNext = await createServer({ peer: second.peer })(next);
+  await flush(); await flush();
+  assert.deepEqual(second.peers.map((value) => value.identity.session_id), ["ses_kept"]);
+  assert.equal(errors.mock.calls.length, 1);
+  assert.match(String(errors.mock.calls[0].arguments[0]), /session not found/u);
+  // It still serves activations.
+  assert.deepEqual(await next.handlers.activate({ sessionID: "ses_new", socket: "/bus.sock", groups: [] }), {});
+  await cleanupNext();
+  await createServer({ peer: third.peer })(reloaded(t, next));
+  await flush(); await flush();
+  assert.deepEqual(third.peers.map((value) => value.identity.session_id).sort(), ["ses_kept", "ses_new"]);
+});
+
+test("server: a lane binding is handed over; the tool works again without a new bind, which stays idempotent", async (t) => {
+  const first = fakeForwarders(), second = fakeForwarders();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer: fakePeers().peer, forwarder: first.forwarder })(ctx);
+  await ctx.handlers.lane({ sessionID: "ses_l", socket: "/lane.sock" });
+  await cleanup();
+  assert.equal(first.forwards[0].disposed, true);
+  const next = reloaded(t, ctx);
+  const peers = fakePeers();
+  const cleanupNext = await createServer({ peer: peers.peer, forwarder: second.forwarder })(next);
+  assert.equal(second.forwards.length, 1); assert.equal(peers.peers.length, 0);
+  assert.deepEqual(await next.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_l", messageID: "msg_1" }), { content: '{"via":"/lane.sock"}' });
+  // The worker's bind before its next Run finds the binding.
+  assert.deepEqual(await next.handlers.lane({ sessionID: "ses_l", socket: "/lane.sock" }), {});
+  assert.equal(second.forwards.length, 1);
+  // A TUI still cannot take a lane's session.
+  assert.equal((await next.handlers.activate({ sessionID: "ses_l", socket: "/bus.sock", groups: [] })).rpcError?.type, "sessionbus.conflict");
+  // The worker ended: its record goes, and the next instance binds nothing.
+  second.forwards[0].end();
+  await flush();
+  await cleanupNext();
+  const third = fakeForwarders();
+  await createServer({ peer: fakePeers().peer, forwarder: third.forwarder })(reloaded(t, next));
+  await flush();
+  assert.equal(third.forwards.length, 0);
+});
+
+test("server: a lane binding is handed over again at every reload, with nothing reported", async (t) => {
+  const errors = t.mock.method(console, "error", () => {});
+  const first = fakeForwarders(), second = fakeForwarders(), third = fakeForwarders();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer: fakePeers().peer, forwarder: first.forwarder })(ctx);
+  await ctx.handlers.lane({ sessionID: "ses_l", socket: "/lane.sock" });
+  await cleanup();
+  const next = reloaded(t, ctx);
+  const cleanupNext = await createServer({ peer: fakePeers().peer, forwarder: second.forwarder })(next);
+  await flush(); await flush();
+  await cleanupNext();
+  await createServer({ peer: fakePeers().peer, forwarder: third.forwarder })(reloaded(t, next));
+  await flush(); await flush();
+  assert.equal(second.forwards.length, 1);
+  assert.equal(third.forwards.length, 1);
+  assert.equal(third.forwards[0].socket, "/lane.sock"); assert.equal(third.forwards[0].disposed, false);
+  assert.equal(errors.mock.calls.length, 0);
+});
+
+test("server: a retained lane whose connection cannot be created is reported and dropped; setup still succeeds", async (t) => {
+  const errors = t.mock.method(console, "error", () => {});
+  const first = fakeForwarders();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer: fakePeers().peer, forwarder: first.forwarder })(ctx);
+  await ctx.handlers.lane({ sessionID: "ses_l", socket: "/lane.sock" });
+  await cleanup();
+  const next = reloaded(t, ctx);
+  await createServer({ peer: fakePeers().peer, forwarder: () => { throw new Error("cannot connect"); } })(next);
+  assert.equal(errors.mock.calls.length, 1);
+  assert.match(String(errors.mock.calls[0].arguments[0]), /cannot connect/u);
+  assert.equal(handoffRecords(next).has("ses_l"), false);
+  assert.ok(next.handlers?.lane && next.tool.added && next.hooks?.context);
+});
+
+test("server: a lane endpoint that cannot be reached at the restore is dropped; the next bind works as before", async (t) => {
+  const first = fakeForwarders(), second = fakeForwarders();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer: fakePeers().peer, forwarder: first.forwarder })(ctx);
+  await ctx.handlers.lane({ sessionID: "ses_l", socket: "/lane.sock" });
+  await cleanup();
+  const next = reloaded(t, ctx);
+  await createServer({ peer: fakePeers().peer, forwarder: second.forwarder })(next);
+  assert.equal(second.forwards.length, 1);
+  // The restored connection fails: the worker's endpoint is gone.
+  second.forwards[0].end();
+  await flush();
+  assert.equal(handoffRecords(next).has("ses_l"), false);
+  await assert.rejects(next.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_l", messageID: "msg_1" }), /not active/u);
+  assert.deepEqual(await next.handlers.lane({ sessionID: "ses_l", socket: "/lane2.sock" }), {});
+  assert.deepEqual(await next.tool.added.execute({ action: "list", arguments: {} }, { sessionID: "ses_l", messageID: "msg_2" }), { content: '{"via":"/lane2.sock"}' });
+});
+
+test("server: something else under the hand-off key, or an unusable record, is ignored without failing setup", async (t) => {
+  const errors = t.mock.method(console, "error", () => {});
+  const key = Symbol.for("sessionbus.opencode.handoff.v1");
+  // Any instance creates the table.
+  await createServer({ peer: fakePeers().peer })(serverContext(t));
+  const saved = globalThis[key];
+  assert.ok(saved instanceof WeakMap);
+  t.after(() => { globalThis[key] = saved; });
+  const ctx = serverContext(t);
+  saved.set(ctx.location, new Map([["ses_x", { socket: 7, groups: [] }], ["ses_v", { socket: "/bus.sock" }], ["ses_y", null], ["ses_z", { lane: "relative.sock" }], ["ses_w", { lane: 7 }]]));
+  const peers = fakePeers(), forwards = fakeForwarders();
+  await createServer({ peer: peers.peer, forwarder: forwards.forwarder })(ctx);
+  await flush(); await flush();
+  assert.equal(peers.peers.length, 0); assert.equal(forwards.forwards.length, 0);
+  assert.equal(errors.mock.calls.length, 5);
+  assert.equal(saved.get(ctx.location).size, 0);
+  // No location object to key by: that instance shares nothing and setup still succeeds.
+  const nowhere = serverContext(t);
+  nowhere.location = undefined;
+  await createServer({ peer: peers.peer })(nowhere);
+  assert.ok(nowhere.handlers?.activate);
+  // A value of another shape under the key: this instance shares nothing and still works.
+  globalThis[key] = "from another build";
+  const other = serverContext(t);
+  await createServer({ peer: peers.peer })(other);
+  assert.deepEqual(await other.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: [] }), {});
+  assert.equal(peers.peers.length, 1);
+  assert.equal(globalThis[key], "from another build");
+});
+
 function tuiContext() {
   const listeners = new Map(), calls = [], toasts = [];
   let route = { type: "home" };
