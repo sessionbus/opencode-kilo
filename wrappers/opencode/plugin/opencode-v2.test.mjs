@@ -446,6 +446,70 @@ test("server: a TUI activation racing the restore creates one Peer", async (t) =
   assert.equal(second.peers[0].identity.session_id, "ses_a");
 });
 
+test("server: a TUI activation that attaches before the restore does uses the retained name, groups and socket", async (t) => {
+  const first = fakePeers(), second = fakePeers(), third = fakePeers();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer: first.peer })(ctx);
+  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"], name: "worker" });
+  await cleanup();
+  // Native has since taken a title the bus name grammar refuses; the bus name stayed worker.
+  const next = reloaded(t, ctx);
+  let release, reads = 0;
+  const gate = new Promise((resolve) => { release = resolve; });
+  next.session.get = async ({ sessionID }) => { if (!reads++) await gate; return { id: sessionID, title: "bad　title" }; };
+  const cleanupNext = await createServer({ peer: second.peer })(next);
+  await flush();
+  // The restore's read is still pending. The surviving TUI activates again: its launch name is spent, and its
+  // read settles first. Its socket and groups differ here only to show which binding is used.
+  const activation = next.handlers.activate({ sessionID: "ses_a", socket: "/other.sock", groups: ["other"] });
+  const answer = await Promise.race([activation, flush().then(flush).then(() => "still waiting")]);
+  const held = (peers) => peers.map((value) => [value.identity.name, value.identity.groups, value.env.SESSIONBUS_SOCKET, value.disposed]);
+  const whileHeld = held(second.peers);
+  // Released before anything is asserted, so that a variant without the restore fails here and does not wait.
+  release();
+  await activation;
+  await flush(); await flush();
+  assert.deepEqual(answer, {});
+  assert.deepEqual(whileHeld, [["worker", ["team"], "/bus.sock", false]]);
+  assert.deepEqual(held(second.peers), [["worker", ["team"], "/bus.sock", false]]);
+  // The next instance gets that same identity again.
+  await cleanupNext();
+  await createServer({ peer: third.peer })(reloaded(t, next));
+  await flush(); await flush();
+  assert.deepEqual(held(third.peers), [["worker", ["team"], "/bus.sock", false]]);
+});
+
+test("server: a session native deletes while such an activation waits is not attached, and a new one attaches as its input says", async (t) => {
+  const first = fakePeers(), second = fakePeers();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer: first.peer })(ctx);
+  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"], name: "worker" });
+  await cleanup();
+  const next = reloaded(t, ctx);
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const read = next.session.get;
+  next.session.get = async (input) => { await gate; return read(input); };
+  await createServer({ peer: second.peer })(next);
+  await flush();
+  // Both the restore and the activation wait for native when the deletion is announced.
+  const activation = next.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] });
+  await flush();
+  next.publish({ type: "session.deleted", data: { sessionID: "ses_a" } });
+  await flush(); await flush();
+  release();
+  await activation;
+  await flush(); await flush();
+  assert.equal(second.peers.length, 0);
+  assert.equal(next.updates.length, 0);
+  assert.equal(handoffRecords(next).has("ses_a"), false);
+  // Nothing is retained for it now: an activation is an ordinary first one.
+  assert.deepEqual(await next.handlers.activate({ sessionID: "ses_a", socket: "/new.sock", groups: ["new"], name: "fresh" }), {});
+  assert.equal(second.peers.length, 1);
+  assert.equal(second.peers[0].identity.name, "fresh"); assert.deepEqual(second.peers[0].identity.groups, ["new"]);
+  assert.equal(second.peers[0].env.SESSIONBUS_SOCKET, "/new.sock");
+});
+
 test("server: an instance cleaned up while its restore waits creates no Peer and leaves the record to the next", async (t) => {
   const first = fakePeers(), second = fakePeers(), third = fakePeers();
   const ctx = serverContext(t);
@@ -858,17 +922,32 @@ test("server: something else under the hand-off key, or an unusable record, is i
   assert.equal(peers.peers.length, 0); assert.equal(forwards.forwards.length, 0);
   assert.equal(errors.mock.calls.length, 5);
   assert.equal(saved.get(ctx.location).size, 0);
+  // A record that is not a TUI session's does not shape an activation that arrives before it is dropped.
+  const early = serverContext(t);
+  saved.set(early.location, new Map([["ses_q", { lane: "relative.sock" }]]));
+  let registered;
+  const pending = new Promise((resolve) => { registered = resolve; });
+  const transform = early.tool.transform;
+  early.tool.transform = async (callback) => { await pending; return transform(callback); };
+  const starting = createServer({ peer: peers.peer, forwarder: forwards.forwarder })(early);
+  for (let i = 0; i < 5 && !early.handlers; i++) await flush();
+  assert.deepEqual(await early.handlers.activate({ sessionID: "ses_q", socket: "/bus.sock", groups: ["team"], name: "named" }), {});
+  assert.equal(peers.peers.length, 1); assert.equal(peers.peers[0].identity.name, "named");
+  registered();
+  await starting;
+  await flush(); await flush();
+  assert.equal(peers.peers[0].disposed, false); assert.equal(typeof saved.get(early.location).get("ses_q")?.socket, "string");
   // No location object to key by: that instance shares nothing and setup still succeeds.
   const nowhere = serverContext(t);
   nowhere.location = undefined;
-  await createServer({ peer: peers.peer })(nowhere);
+  await createServer({ peer: fakePeers().peer })(nowhere);
   assert.ok(nowhere.handlers?.activate);
   // A value of another shape under the key: this instance shares nothing and still works.
   globalThis[key] = "from another build";
   const other = serverContext(t);
   await createServer({ peer: peers.peer })(other);
   assert.deepEqual(await other.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: [] }), {});
-  assert.equal(peers.peers.length, 1);
+  assert.equal(peers.peers.length, 2);
   assert.equal(globalThis[key], "from another build");
 });
 

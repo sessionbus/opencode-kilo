@@ -172,9 +172,15 @@ export function createServer(dependencies = {}) {
         // The declared transient error keeps the session with the TUI for its
         // next native event. The TUI shows the message.
         const ended = () => context.error("sessionbus.not_admitted", "OpenCode reloaded or unloaded the Sessionbus plugin before this session was attached; it is not on the bus yet", {});
+        // A session the previous instance held for a TUI is attached again as
+        // it was held: its record, not this call's input or the current
+        // title, gives the bus socket, groups and name, whichever of this
+        // call and the restore below attaches it first.
+        const held = records.get(input.sessionID);
+        const retained = typeof held?.socket === "string" ? held : undefined;
         // Idempotent: the TUI activates again after reconnects and unloads.
         try {
-          await attach(input.sessionID, input);
+          await attach(input.sessionID, retained ?? input, retained);
         } catch (error) {
           if (lifetime.signal.aborted) return ended();
           throw error;
