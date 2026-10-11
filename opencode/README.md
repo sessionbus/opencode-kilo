@@ -99,6 +99,8 @@ before it changes. The plugin then hands what it held to its new instance:
 - A Sessionbus tool call pending at that moment, from a managed session or a
   lane, can fail. What it had already attempted is uncertain, and it is not
   repeated. An interactive session has no Sessionbus tool while it is away.
+- The hand-off has passed its tests against stand-ins only. It has not been
+  observed across a real OpenCode reload on a host.
 - The hand-off needs the outgoing plugin to be a build that has it. If OpenCode
   reloads the plugin at the install that first brings such a build, the
   sessions still leave the bus, and nothing is handed over. A session whose TUI
