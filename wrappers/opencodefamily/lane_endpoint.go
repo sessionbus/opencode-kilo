@@ -6,14 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
-	"time"
 
 	"github.com/sessionbus/peer-common/host"
 	"github.com/sessionbus/peer-common/mcp"
@@ -50,15 +47,17 @@ type laneToolOwner struct {
 // of this shape are treated as this family's published lane tool sockets.
 const laneKeyLength = 24
 
+// laneKey reports whether value has the published lane tool socket key shape.
 func laneKey(value string) bool {
 	return len(value) == laneKeyLength && strings.Trim(value, "0123456789abcdef") == ""
 }
 
 // listenLaneSocket publishes a lane tool socket under its key only once it
 // listens: it is created under a temporary name outside the key shape and then
-// renamed. A socket of the key shape that refuses a connection therefore
-// belongs to a worker of this build that is gone. Older builds bound the key
-// name directly; none may be starting a lane when this build first runs.
+// renamed. On Linux a socket of the key shape that refuses a connection
+// therefore belongs to a worker of this build that is gone, which is what
+// removeDeadLaneSockets relies on. Older builds bound the key name directly;
+// none may be starting a lane when this build first runs.
 func listenLaneSocket(socket, key string) (*host.PrivateEndpoint, error) {
 	if !laneKey(key) {
 		return nil, errors.New("lane tool socket key is invalid")
@@ -74,28 +73,6 @@ func listenLaneSocket(socket, key string) (*host.PrivateEndpoint, error) {
 	}
 	l.Path = published
 	return l, nil
-}
-
-// removeDeadLaneSockets removes lane tool sockets left by lane workers of this
-// family that ended without closing them, such as after SIGKILL. It removes a
-// socket of the key shape only when a connection to it is refused; any other
-// outcome leaves the entry. It never fails an Open.
-func removeDeadLaneSockets(socket string) {
-	directory := filepath.Join(filepath.Dir(socket), "lanes")
-	entries, _ := os.ReadDir(directory)
-	for _, entry := range entries {
-		key, isSocket := strings.CutSuffix(entry.Name(), ".sock")
-		if !isSocket || entry.Type()&fs.ModeSocket == 0 || !laneKey(key) {
-			continue
-		}
-		path := filepath.Join(directory, entry.Name())
-		connection, err := net.DialTimeout("unix", path, time.Second)
-		if err == nil {
-			_ = connection.Close()
-		} else if errors.Is(err, syscall.ECONNREFUSED) {
-			_ = os.Remove(path)
-		}
-	}
 }
 
 func newLaneEndpoint(owner LaneToolHost, socket, key, product, title string) (*laneEndpoint, error) {

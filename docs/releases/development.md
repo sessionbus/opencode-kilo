@@ -6,5 +6,5 @@ The native plugin build uses Node 24/npm to stage and pack the existing JavaScri
 
 ## Changes since v0.5.10
 
-- **A killed lane worker's tool socket is cleaned up.** A lane worker that is killed without closing (for example by SIGKILL) used to leave its tool socket file in the Sessionbus runtime directory until the next daemon start. Now the next OpenCode or Kilo lane worker to start on that host removes it. A worker killed during its own startup can still leave a `t-` socket file, which the next daemon start removes.
+- **A killed lane worker's tool socket is cleaned up.** A lane worker that is killed without closing (for example by SIGKILL) used to leave its tool socket file in the Sessionbus runtime directory until the next daemon start. Now, on Linux, the next OpenCode or Kilo lane worker to start on that host removes it. On macOS nothing changes: a refused connection there does not prove the worker is gone, so the file stays until the next daemon start. A worker killed during its own startup can still leave a `t-` socket file, which the next daemon start removes.
 - **Upgrade while no OpenCode or Kilo lane is running or starting.** A lane worker of an earlier build that is still starting when the first lane of this build starts could lose its tool socket.
