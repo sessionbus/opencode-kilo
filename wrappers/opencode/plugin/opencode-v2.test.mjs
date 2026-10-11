@@ -498,12 +498,53 @@ test("server: a session native deletes while such an activation waits is not att
   next.publish({ type: "session.deleted", data: { sessionID: "ses_a" } });
   await flush(); await flush();
   release();
-  await activation;
+  const answer = await activation;
   await flush(); await flush();
+  // Nothing was attached, and the call does not say it was.
+  assert.equal(answer.rpcError?.type, "sessionbus.not_admitted");
   assert.equal(second.peers.length, 0);
   assert.equal(next.updates.length, 0);
   assert.equal(handoffRecords(next).has("ses_a"), false);
   // Nothing is retained for it now: an activation is an ordinary first one.
+  assert.deepEqual(await next.handlers.activate({ sessionID: "ses_a", socket: "/new.sock", groups: ["new"], name: "fresh" }), {});
+  assert.equal(second.peers.length, 1);
+  assert.equal(second.peers[0].identity.name, "fresh"); assert.deepEqual(second.peers[0].identity.groups, ["new"]);
+  assert.equal(second.peers[0].env.SESSIONBUS_SOCKET, "/new.sock");
+});
+
+test("server: an activation whose retained record is dropped while it waits answers the transient error, not success", async (t) => {
+  const errors = t.mock.method(console, "error", () => {});
+  const first = fakePeers(), second = fakePeers();
+  const ctx = serverContext(t);
+  const cleanup = await createServer({ peer: first.peer })(ctx);
+  await ctx.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"], name: "worker" });
+  await cleanup();
+  // The restore's read is the first, the activation's the second. Each is settled by hand.
+  const next = reloaded(t, ctx);
+  let failFirst, releaseSecond, reads = 0;
+  const read = next.session.get;
+  next.session.get = (input) => {
+    reads += 1;
+    if (reads === 1) return new Promise((_resolve, reject) => { failFirst = reject; });
+    if (reads === 2) return new Promise((resolve) => { releaseSecond = () => resolve(read(input)); });
+    return read(input);
+  };
+  await createServer({ peer: second.peer })(next);
+  await flush();
+  const activation = next.handlers.activate({ sessionID: "ses_a", socket: "/bus.sock", groups: ["team"] }).catch((error) => error);
+  await flush();
+  // The restore fails: its record is reported and dropped. Then the activation's own read succeeds.
+  failFirst(new Error("read failed"));
+  await flush(); await flush();
+  releaseSecond?.();
+  const answer = await activation;
+  await flush(); await flush();
+  assert.equal(answer?.rpcError?.type, "sessionbus.not_admitted");
+  assert.equal(second.peers.length, 0);
+  assert.equal(next.updates.length, 0);
+  assert.equal(errors.mock.calls.length, 1);
+  assert.equal(handoffRecords(next).has("ses_a"), false);
+  // The TUI's next activation is an ordinary first one.
   assert.deepEqual(await next.handlers.activate({ sessionID: "ses_a", socket: "/new.sock", groups: ["new"], name: "fresh" }), {});
   assert.equal(second.peers.length, 1);
   assert.equal(second.peers[0].identity.name, "fresh"); assert.deepEqual(second.peers[0].identity.groups, ["new"]);

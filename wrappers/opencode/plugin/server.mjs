@@ -193,6 +193,10 @@ export function createServer(dependencies = {}) {
         // only this wait.
         const entry = peers.get(input.sessionID);
         if (entry?.forward) return conflict(context, entry);
+        // What was retained for the session went while this call waited
+        // (native deleted the session, or its record was dropped), so nothing
+        // was attached. That is never success.
+        if (!entry && retained) return context.error("sessionbus.not_admitted", "this session was not attached again after OpenCode reloaded the Sessionbus plugin; it is not on the bus yet", {});
         if (entry) {
           try {
             await entry.peer.ready(AbortSignal.any([context.signal, AbortSignal.timeout(admissionWait)]));
