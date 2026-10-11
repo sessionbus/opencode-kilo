@@ -3,6 +3,7 @@
 package kilo
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -20,8 +21,13 @@ import (
 	"github.com/sessionbus/peer-common/testsocket"
 )
 
-func TestCompiledKiloLauncherDirectLifetimeAndNativeResources(t *testing.T) {
-	bin := t.TempDir()
+const registeredPlugin = `{"plugin":["@sessionbus/kilo"]}`
+
+// compiledKiloLauncher builds the launcher and the fake native into one
+// directory, with the native resource the launcher resolves next to it.
+func compiledKiloLauncher(t *testing.T) (bin, canonicalBin string) {
+	t.Helper()
+	bin = t.TempDir()
 	for _, build := range []struct{ name, source string }{{"kilo", "./wrappers/kilo/testdata/interactive_native.go"}, {"launcher", "./cmd/kilo-peer"}} {
 		command := exec.Command("go", "build", "-o", filepath.Join(bin, build.name), build.source)
 		command.Dir = "../.."
@@ -29,17 +35,100 @@ func TestCompiledKiloLauncherDirectLifetimeAndNativeResources(t *testing.T) {
 			t.Fatalf("build %s: %v %s", build.name, err, out)
 		}
 	}
-	resource := filepath.Join(bin, "tree-sitter")
-	if err := os.Mkdir(resource, 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(resource, "tree-sitter.wasm"), []byte("native resource fixture"), 0644); err != nil {
-		t.Fatal(err)
-	}
+	writeLauncherFixture(t, filepath.Join(bin, "tree-sitter", "tree-sitter.wasm"), "native resource fixture")
 	canonicalBin, err := filepath.EvalSymlinks(bin)
 	if err != nil {
 		t.Fatal(err)
 	}
+	return bin, canonicalBin
+}
+
+func writeLauncherFixture(t *testing.T, file, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A managed launch whose plugin lists positively lack our plugin is refused
+// before the native starts. An answer the launcher cannot establish starts the
+// native exactly as before.
+func TestCompiledKiloLauncherRequiresThePluginRegistration(t *testing.T) {
+	bin, canonicalBin := compiledKiloLauncher(t)
+	// The restore command is offered only when the plugin package is next to the executable.
+	writeLauncherFixture(t, filepath.Join(bin, "plugin", "package.json"), `{"name":"@sessionbus/kilo"}`)
+	restore := "'" + filepath.Join(canonicalBin, "launcher") + "' --sessionbus-install --plugin-dir '" + filepath.Join(canonicalBin, "plugin") + "'"
+	for _, tc := range []struct {
+		name    string
+		files   map[string]string
+		missing string // empty: the native must be started
+	}{
+		{"no config directory", nil, "server and TUI"},
+		{"both lists without ours", map[string]string{"kilo.jsonc": `{"plugin":["somebody-else"]}`, "tui.jsonc": `{}`}, "server and TUI"},
+		{"tui list without ours", map[string]string{"kilo.jsonc": registeredPlugin, "tui.jsonc": `{"plugin":[]}`}, "TUI"},
+		{"server list without ours", map[string]string{"kilo.jsonc": `{}`, "tui.jsonc": registeredPlugin}, "server"},
+		{"plugin file but no TUI entry", map[string]string{"plugins/agent.js": "export default {}\n"}, "TUI"},
+		{"unparsable files", map[string]string{"kilo.jsonc": `{ "plugin": [`, "tui.jsonc": `{`}, ""},
+		{"env token entries", map[string]string{"kilo.jsonc": `{"plugin":["{env:OWNED}"]}`, "tui.jsonc": `{"plugin":["{env:OWNED}"]}`}, ""},
+		{"plugin file and TUI entry", map[string]string{"plugins/agent.js": "export default {}\n", "tui.jsonc": registeredPlugin}, ""},
+		{"both registered", map[string]string{"kilo.jsonc": registeredPlugin, "tui.jsonc": registeredPlugin}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			config := filepath.Join(home, ".config", "kilo")
+			for name, body := range tc.files {
+				writeLauncherFixture(t, filepath.Join(config, name), body)
+			}
+			directory := testsocket.Directory(t)
+			listener, err := net.Listen("unix", filepath.Join(directory, "report.sock"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer listener.Close()
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			command := exec.CommandContext(ctx, filepath.Join(bin, "launcher"), "-g", "one", "-n", "gate")
+			command.Dir = bin
+			var stderr bytes.Buffer
+			command.Stderr = &stderr
+			command.Env = []string{"PATH=" + bin, "HOME=" + home, "SESSIONBUS_SOCKET=" + filepath.Join(directory, "bus.sock"), "KILO_TEST_SOCKET=" + listener.Addr().String(), "KILO_TEST_MODE=exit"}
+			runErr := command.Run()
+			// The fake native connects before it exits, and the launcher joins it, so a
+			// started native has a connection waiting here.
+			if err := listener.(*net.UnixListener).SetDeadline(time.Now().Add(300 * time.Millisecond)); err != nil {
+				t.Fatal(err)
+			}
+			conn, acceptErr := listener.Accept()
+			if acceptErr == nil {
+				conn.Close()
+			}
+			started := acceptErr == nil
+			if tc.missing == "" {
+				if runErr != nil || !started || stderr.Len() != 0 {
+					t.Fatalf("the native must start: err=%v started=%v stderr=%q", runErr, started, stderr.String())
+				}
+				return
+			}
+			want := "Kilo Sessionbus plugin is not in the " + tc.missing + " plugin list of " + config + ", which a managed launch requires; register it with: " + restore + "\n"
+			var exit *exec.ExitError
+			if started || !errors.As(runErr, &exit) || exit.ExitCode() != 1 || stderr.String() != want {
+				t.Fatalf("the launch must be refused before the native starts: started=%v err=%v\nstderr %q\n  want %q", started, runErr, stderr.String(), want)
+			}
+			if left, _ := filepath.Glob(filepath.Join(directory, "kilo-*")); len(left) != 0 {
+				t.Fatalf("a refused launch created %v", left)
+			}
+		})
+	}
+}
+
+func TestCompiledKiloLauncherDirectLifetimeAndNativeResources(t *testing.T) {
+	bin, canonicalBin := compiledKiloLauncher(t)
+	// The launch environment below uses bin as HOME: register the plugin there.
+	writeLauncherFixture(t, filepath.Join(bin, ".config", "kilo", "kilo.jsonc"), registeredPlugin)
+	writeLauncherFixture(t, filepath.Join(bin, ".config", "kilo", "tui.jsonc"), registeredPlugin)
 	previous := ""
 	for _, mode := range []string{"exit", "exit", "error", "term", "hup", "interrupt"} {
 		t.Run(mode, func(t *testing.T) {

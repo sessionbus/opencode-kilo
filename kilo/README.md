@@ -61,6 +61,26 @@ launcher generates a per-launch password. Native shell hooks clear the two
 managed topology values for ordinary descendants; native auth stripping remains
 Kilo's own policy. No caller config layer is replaced.
 
+A managed launch needs the two plugin registrations the installer writes. Before
+it starts Kilo, `kilo-peer` reads the plugin lists in the global Kilo config
+directory (`$XDG_CONFIG_HOME/kilo`, else `~/.config/kilo`). If the server list or
+the TUI list positively holds no Sessionbus entry, it starts nothing, names the
+list and the directory, and prints the command that registers the plugin again.
+Run plain `kilo` for a session without Sessionbus.
+
+- The check refuses only what it can establish. If a config file cannot be read
+  or parsed, an entry uses `{env:...}` or `{file:...}`, an entry is a URL, a
+  `git:` or aliased package, or a local package whose `package.json` cannot be
+  read, the answer is unknown and the launch proceeds as before. A `*.js` or
+  `*.ts` file in that directory's `plugin` or `plugins` folder makes the server
+  answer unknown in the same way.
+- A registration kept only outside those global files is not recognised, and
+  the launch is refused: a project `kilo.json`, a `.kilo` directory, `KILO_CONFIG`,
+  `KILO_CONFIG_DIR`, `KILO_CONFIG_CONTENT`, `KILO_TUI_CONFIG`, remote or managed
+  config.
+- A plugin that is registered but inactive is not detected: one switched off in
+  Kilo's plugin list, or one that fails to load.
+
 Ordinary Kilo plugin loading supplies no Sessionbus tool, endpoint or Peer. The
 generic skill is registered for native discovery by local package installation.
 Managed TUI selection establishes native

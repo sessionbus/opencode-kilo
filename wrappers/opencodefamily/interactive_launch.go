@@ -54,6 +54,11 @@ func runInteractive(ctx context.Context, plan host.ExecPlan, product interactive
 	if err = validateNativeTopology(plan.Args, plan.Env, product.kilo); err != nil {
 		return err
 	}
+	if product.kilo {
+		if err = requireManagedRegistration(kiloNative, product.label, plan.Env); err != nil {
+			return err
+		}
+	}
 	socket := InteractiveEnvironmentValue(plan.Env, host.SocketEnv)
 	if !filepath.IsAbs(socket) {
 		return errors.New("managed Sessionbus socket must be absolute")
