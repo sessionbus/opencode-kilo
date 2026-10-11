@@ -148,9 +148,10 @@ operator cleanup. Lane close aborts owned work and follows native TERM disposal;
 forced close and exact exit diagnostics require separate evidence from the close
 RPC result. A lane worker that is killed without closing leaves its tool socket
 file in the Sessionbus runtime directory. On Linux the next Kilo or OpenCode lane
-worker to start on that host removes it; on macOS it stays until the next daemon
-start. A worker killed during its own startup can leave a `t-` socket file there,
-which the next daemon start removes. Installed lifecycle results and their limits
+worker to start on that host removes it; on macOS it stays. A worker killed during
+its own startup can leave a `t-` socket file there. A Sessionbus daemon through
+v0.5.12 clears such files when it starts; that is not promised for a later
+daemon. Installed lifecycle results and their limits
 are recorded in
 [ACCEPTANCE.md](../docs/designs/kilo-0.5.0/ACCEPTANCE.md).
 

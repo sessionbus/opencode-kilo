@@ -13,8 +13,13 @@ to exact registry version `0.5.12` in the package manifest and lockfile.
 No separate Node, npm, Bun installation, Go broker, or native OpenCode patch is
 required on the target. Source builds use Go and npm. The target native is
 OpenCode 2.0.21 (the v2 line with its background service). Interactive
-behaviour has live acceptance evidence on that build for the recorded cells only;
-lanes on OpenCode 2.0.21 are not yet live-proven. Installed acceptance is
+sessions and lanes have live evidence on that native, on Linux, for the recorded
+cells only. For lanes these are: spawn, Run, wait, acknowledge, resume, close
+and forget; a message to an idle lane and to a busy one, including two lanes
+messaging each other; cancel with a message pending; the permission, model and
+notify options; and a killed worker followed by a resume. Cells that failed or
+were not run are listed in the [v0.5.11 release notes](../docs/releases/v0.5.11.md)
+and in [KNOWN-ISSUES.md](../docs/KNOWN-ISSUES.md). Installed acceptance is
 reported separately from source compatibility.
 
 The installer edits only owned entries in native global server/TUI JSON/JSONC
@@ -75,8 +80,8 @@ tool takes exactly `action` and `arguments`. Native sub-agent (task) sessions
 are never peers of their own: where OpenCode lets one use the tool, it speaks
 as the managed session or lane it descends from.
 
-OpenCode reloads this plugin inside its running service when the plugin's files
-change, as an install of this package can, or when a plugin that is set up
+OpenCode can reload this plugin inside its running service: after the plugin's
+files change, as at an install of this package, or when a plugin that is set up
 before it changes. The plugin then hands what it held to its new instance:
 - A managed interactive session leaves the bus and is meant to join it again
   with no relaunch, under the same ID and groups and the bus name it had. A
@@ -94,16 +99,27 @@ before it changes. The plugin then hands what it held to its new instance:
 - A Sessionbus tool call pending at that moment, from a managed session or a
   lane, can fail. What it had already attempted is uncertain, and it is not
   repeated. An interactive session has no Sessionbus tool while it is away.
-- The hand-off needs the outgoing plugin to be a build that has it. The install
-  that first brings such a build still takes the sessions off the bus, and
-  nothing is handed over. A session whose TUI is open can still be activated
-  again by that TUI, at its next reconnect or when OpenCode loads its directory
-  again after an unload, as before.
+- The hand-off has passed its tests against stand-ins only. It has not been
+  observed across a real OpenCode reload on a host.
+- The hand-off needs the outgoing plugin to be a build that has it. If OpenCode
+  reloads the plugin at the install that first brings such a build, the
+  sessions still leave the bus, and nothing is handed over. A session whose TUI
+  is open can still be activated again by that TUI, at its next reconnect or
+  when OpenCode loads its directory again after an unload, as before.
 - It does not reach across an unload: a session whose directory OpenCode
   unloads leaves the bus as described above.
 - Read in the OpenCode 2.0.21 source: it does not load the Sessionbus kit again
   on such a reload. After an install that brings a new kit, the running service
   would keep the kit it loaded first until the service is restarted.
+
+OpenCode does not always reload the plugin after an install. A running service
+keeps the plugin it has loaded until OpenCode loads plugins again or the service
+is restarted. `opencode service restart` loads the installed build. It is
+OpenCode's own command: a shell command still running in any OpenCode session
+ends, a lane's running Run ends as described below, and every managed session
+leaves the bus when the old service process ends. A session whose TUI is open is
+activated again by that TUI when it reconnects; one without an open TUI needs a
+new activation.
 
 Lane model selection follows native configuration. A caller can set an explicit
 `open.model` such as `"google/gemini-3.1-pro-preview"` in a spawn request. A lane
@@ -139,9 +155,9 @@ the lane's running Run (reported unavailable), after which OpenCode may continue
 that turn by itself; killing a lane worker does not stop a turn already running.
 A lane worker that is killed without closing leaves its tool socket file in the
 Sessionbus runtime directory. On Linux the next OpenCode or Kilo lane worker to
-start on that host removes it; on macOS it stays until the next daemon start. A
-worker killed during its own startup can leave a `t-` socket file there, which
-the next daemon start removes.
+start on that host removes it; on macOS it stays. A worker killed during its own
+startup can leave a `t-` socket file there. A Sessionbus daemon through v0.5.12
+clears such files when it starts; that is not promised for a later daemon.
 A message to a busy lane reaches its current turn at the next model step. With
 no human present, permission asks and questions in a lane are declined with a
 message and the model continues, unless the lane was opened with
