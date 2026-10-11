@@ -84,6 +84,14 @@ After SIGKILL of a lane worker, its lane tool socket under
 
 Evidence: RESULTS-S5-LANES.md (A2 and its precision), RESULTS-LANES-KILO.md (A2 RCA), LANE-SOCKET-NOTE-1.md.
 
+**Status since 3a18485 (added 2026-10-11; the record above is unchanged):**
+- **Linux:** the next OpenCode or Kilo lane worker to start on that host removes every lane tool socket of the ordinary name shape (`<24 hex digits>.sock`) in that directory that refuses a connection. Live, on build a138a1d4 with daemon v0.5.11, one trial per product: the killed worker's socket was still there 3 s after the kill, and the directory was empty after that product's next lane, a resume of the same session, had run and closed.
+- **macOS:** unchanged. A refused connection there does not prove the worker is gone, so the file stays. Not run.
+- **Still left on both:** a worker killed during its own startup can leave a `t-` socket file.
+- **Clearing at daemon start:** the clearing described in the record above is what Sessionbus daemons through v0.5.12 do when they start. It is not promised for a later daemon.
+
+Evidence: `sessionbus-evidence/ock-f4-opus-20261011/RESULTS-F4-HOST.md` in the operator evidence store.
+
 ## 5. OpenCode interactive: topology flags
 
 - **Up to 5e6c451:**
