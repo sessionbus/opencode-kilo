@@ -394,9 +394,7 @@ func TestKiloFailedAbortDoesNotAbandonAcceptedInput(t *testing.T) {
 		t.Fatalf("delivery not accepted: %+v", receipt)
 	}
 	reply := f.begin(t, "turn.interrupt", map[string]any{"session_id": "ses_native@local"})
-	// Wait until the paused abort request has reached the fake native, so the
-	// captured-op order is deterministic: the native terminal arrives while
-	// the abort attempt is still unresolved.
+	// Wait until the paused abort request has reached the fake native.
 	deadline := time.Now().Add(10 * time.Second)
 	for f.abortCount(t) < 1 {
 		if time.Now().After(deadline) {
@@ -404,10 +402,49 @@ func TestKiloFailedAbortDoesNotAbandonAcceptedInput(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	// Capture the active Run and its interrupt op under the lane mutex: the
+	// abort has reached native, so ensureInterrupt has published the op and
+	// the terminal branch has not run yet.
+	f.p.mu.Lock()
+	if f.p.active == nil || f.p.active.interrupt == nil {
+		f.p.mu.Unlock()
+		t.Fatal("no active Run with a retained interrupt op after abort arrival")
+	}
+	captured, op, inbox := f.p.active, f.p.active.interrupt, len(f.p.active.inbox)
+	f.p.mu.Unlock()
+	if inbox == 0 {
+		t.Fatal("accepted input missing before the native terminal release")
+	}
 	// The native terminal arrives first; then the abort fails. The Run must
 	// re-evaluate and deliver the already accepted input, not abandon it.
 	if _, err := f.p.client.call(f.ctx, "POST", "/fixture/release", nil, 200); err != nil {
 		t.Fatal(err)
+	}
+	// Pin the captured-op order before failing the abort: the SAME active Run
+	// has made its terminal decision (t.closed), still holds the SAME op,
+	// still carries the accepted input, and the op is still pending. t.closed
+	// is written only after that decision snapshots t.interrupt under the
+	// same mutex, and a paused op cannot be cleared or replaced, so this
+	// proves capture before the failure settles. Pending is observed via the
+	// done channel, never via unsynchronized err/ack.
+	deadline = time.Now().Add(10 * time.Second)
+	for {
+		f.p.mu.Lock()
+		pending := false
+		select {
+		case <-op.done:
+		default:
+			pending = true
+		}
+		observed := f.p.active == captured && captured.closed && captured.interrupt == op && len(captured.inbox) == inbox && pending
+		f.p.mu.Unlock()
+		if observed {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("captured-op terminal decision not observed before the abort settled")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	if _, err := f.p.client.call(f.ctx, "POST", "/fixture/abort-release", nil, 200); err != nil {
 		t.Fatal(err)
