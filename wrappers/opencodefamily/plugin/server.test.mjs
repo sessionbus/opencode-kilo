@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { nativeProduct } from "./profile.mjs";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdtemp, rm, stat, unlink } from "node:fs/promises";
 import test from "node:test";
 import { execFileSync } from "node:child_process";
 import { createServer } from "./server.mjs";
@@ -28,7 +28,11 @@ async function rejoinFixture(t) {
     const endpoint = new InteractiveEndpoint(f.directory + "/actions.sock", action, input);
     t.after(() => endpoint.dispose());
     await endpoint.ready();
-    const remove = await publishEndpoint(f.directory);
+    await publishEndpoint(f.directory);
+    // Fixture owns this publication independently of the production cleanup
+    // return API, so the identical test exercises released reconnect behavior.
+    let removing;
+    const remove = () => removing ||= unlink(f.directory + "/actions.ready").catch((error) => { if (error.code !== "ENOENT") throw error; });
     t.after(remove);
     return async () => {
       await remove(); await endpoint.dispose();
