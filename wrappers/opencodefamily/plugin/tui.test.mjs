@@ -3,7 +3,8 @@ import { nativeProduct } from "./profile.mjs";
 
 import assert from "node:assert/strict";
 import { once, EventEmitter } from "node:events";
-import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import { mkdirSync, unlinkSync } from "node:fs";
+import { mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import net from "node:net";
 import test from "node:test";
 import { Connection } from "@sessionbus/kit";
@@ -122,6 +123,51 @@ test("failed cleanup keeps the grant reserved instead of allowing an overlapping
   await assert.rejects(f.close(), /cleanup failed/);
   await assert.rejects(start(f.reopen()), { code: "EEXIST" });
   assert.equal((await stat(f.directory + "/owner.claim")).size, 0);
+});
+
+test("failed publication cleanup unwinds resources but refuses grant reuse and never unlinks a replacement marker", { timeout: 5000 }, async (t) => {
+  const f = await fixture(t), marker = f.directory + "/actions.ready";
+  let dispose, subscribed = 0, unsubscribed = 0;
+  const register = f.api.lifecycle.onDispose, on = f.api.event.on;
+  f.api.lifecycle.onDispose = (callback) => { dispose = callback; return register(callback); };
+  f.api.event.on = (...args) => {
+    subscribed++;
+    const off = on(...args);
+    return () => { unsubscribed++; off(); };
+  };
+  const start = createTui({ [nativeProduct.launchEnv]: JSON.stringify(f.binding) }, { solid: f.solid });
+  const Broadcast = globalThis.BroadcastChannel;
+  // After real wx creation, fail both publication and its real unlink. A
+  // directory gives a deterministic unlink failure even when tests run as root.
+  globalThis.BroadcastChannel = class {
+    constructor() {
+      unlinkSync(marker);
+      mkdirSync(marker);
+      throw new Error("fault-injected publication failure");
+    }
+  };
+  try {
+    await assert.rejects(start(f.api), (error) => error.syscall === "unlink" && error.path === marker);
+  } finally { globalThis.BroadcastChannel = Broadcast; }
+  assert.equal((await stat(marker)).isDirectory(), true);
+  await assert.rejects(stat(f.directory + "/actions.sock"), { code: "ENOENT" });
+  assert.ok(subscribed > 0);
+  assert.equal(unsubscribed, subscribed, "owners unwind despite the failed publication cleanup");
+  assert.deepEqual(f.hellos, []);
+  assert.deepEqual(f.creates, []);
+
+  const next = f.reopen(), nextRegister = next.lifecycle.onDispose;
+  let setups = 0;
+  next.lifecycle.onDispose = (callback) => { setups++; return nextRegister(callback); };
+  await assert.rejects(start(next), { code: "EEXIST" });
+  assert.equal(setups, 0, "unresolved owned cleanup must refuse reuse before another setup registers");
+
+  await rm(marker, { recursive: true });
+  await writeFile(marker, "");
+  // An external replacement is not an admitted successor. The old cached
+  // failure must nevertheless never issue another unlink against its path.
+  await dispose().catch(() => {});
+  assert.equal((await stat(marker)).size, 0);
 });
 
 test("ordinary TUI is inert before loading host reactivity or creating resources", async (t) => {

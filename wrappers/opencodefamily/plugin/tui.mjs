@@ -36,15 +36,16 @@ export function createTui(environment = launchEnvironment, dependencies = {}) {
       disposing = (async () => {
         // Withdraw existing resources immediately, even if native startup work
         // has not settled. Checks prevent constructing later owners/endpoints.
-        const closing = Promise.all([unpublish?.(), endpoint?.dispose(), owners?.dispose()]);
-        void closing.catch(() => {});
+        const closing = Promise.allSettled([unpublish?.(), endpoint?.dispose(), owners?.dispose()]);
         await starting?.catch(() => {});
         // Publication may have been in flight when disposal began.
-        await unpublish?.();
-        await closing;
+        const results = await Promise.allSettled([unpublish?.()]);
+        results.push(...await closing);
         await Promise.allSettled([...selections.values()]);
         api.lifecycle.signal.removeEventListener("abort", abort);
         unregister();
+        const failed = results.find((result) => result.status === "rejected");
+        if (failed) throw failed.reason;
         // Failed or incomplete cleanup keeps the reservation. No subsequent
         // activation may overlap it or have its marker removed by this one.
         if (activation === current) activation = undefined;
@@ -72,7 +73,7 @@ export function createTui(environment = launchEnvironment, dependencies = {}) {
         (params, signal) => owners.nativeInput(params, signal));
       await endpoint.ready();
       check();
-      unpublish = await publishEndpoint(launch.directory);
+      unpublish = await publishEndpoint(launch.directory, (remove) => { unpublish = remove; });
       check();
       solid.createRoot((rootDispose) => {
         disposeRoot = rootDispose;

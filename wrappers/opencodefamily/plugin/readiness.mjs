@@ -6,7 +6,7 @@ const channelName = (directory) => "sessionbus:endpoint:" + directory;
 
 // Called only by the owning TUI after its endpoint listens. The file remains
 // the readiness authority; the process-local broadcast is only a wake-up.
-export async function publishEndpoint(directory) {
+export async function publishEndpoint(directory, owned) {
   const file = path.join(directory, "actions.ready");
   const marker = await open(file, "wx", 0o600);
   let removing;
@@ -15,6 +15,9 @@ export async function publishEndpoint(directory) {
     return removing;
   };
   try {
+    // Retain cleanup authority before any later publication failure, even if
+    // removing the owned marker also fails. A failed wx never reaches this.
+    owned?.(remove);
     await marker.close();
     const channel = new BroadcastChannel(channelName(directory));
     try { channel.postMessage(null); }
@@ -23,8 +26,7 @@ export async function publishEndpoint(directory) {
     await remove();
     throw error;
   }
-  // Only the successful publisher owns this cleanup. A failed exclusive open
-  // must never remove another activation's marker.
+  // Repeated cleanup returns its first outcome and cannot unlink a successor.
   return remove;
 }
 
