@@ -10,8 +10,10 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	kit "github.com/antst/sessionbus/bus/sdk/go"
+	"github.com/antst/sessionbus/bus/sdk/go/protocol"
 )
 
 func newKiloWorkerFixture(t *testing.T) *workerFixture {
@@ -320,6 +322,124 @@ func TestKiloLaneDeliveryDefersBeforeNativeSubmission(t *testing.T) {
 	f.start(t, 2, "healthy")
 	if result := f.wait(t, 2); result.Result == nil || result.Result.Result != "answer:healthy" {
 		t.Fatalf("deferred input leaked into later run: %+v", result)
+	}
+	closeKiloFixture(t, f)
+}
+
+// awaitFailedInterrupt sends one turn.interrupt and asserts the SDK answers it
+// with the product-interrupt-failed error that a failed native abort produces.
+func (f *workerFixture) awaitFailedInterrupt(t *testing.T) {
+	t.Helper()
+	var frame protocol.Frame
+	select {
+	case frame = <-f.begin(t, "turn.interrupt", map[string]any{"session_id": "ses_native@local"}):
+	case <-f.ctx.Done():
+		t.Fatal("interrupt did not settle")
+	}
+	if frame.Error == nil || frame.Error.Code != protocol.Internal || !strings.Contains(string(frame.Error.Data), "product interrupt failed") {
+		t.Fatalf("failed abort interrupt frame=%+v", frame)
+	}
+}
+
+func (f *workerFixture) abortCount(t *testing.T) int {
+	t.Helper()
+	raw, err := f.p.client.call(f.ctx, "GET", "/fixture/state", nil, 200)
+	var parsed struct {
+		Aborts int `json:"aborts"`
+	}
+	if err != nil || json.Unmarshal(raw, &parsed) != nil {
+		t.Fatalf("lane state unreachable: %s/%v", raw, err)
+	}
+	return parsed.Aborts
+}
+
+func TestKiloFailedAbortReturnsErrorAndKeepsLaneReachable(t *testing.T) {
+	f := newKiloWorkerFixture(t)
+	f.start(t, 1, "hold-abort-fail")
+	if _, err := f.p.client.call(f.ctx, "GET", "/fixture/started", nil, 200); err != nil {
+		t.Fatal(err)
+	}
+	// The failed abort is reported to the interrupt caller...
+	f.awaitFailedInterrupt(t)
+	// ...and the lane survives it: the owner context is live and the fake
+	// native is still serving.
+	if err := f.p.ctx.Err(); err != nil {
+		t.Fatalf("failed abort ended the lane: %v", err)
+	}
+	// A subsequent explicit interrupt on the same Run calls native again.
+	f.awaitFailedInterrupt(t)
+	if aborts := f.abortCount(t); aborts != 2 {
+		t.Fatalf("second explicit interrupt did not reach native: aborts=%d", aborts)
+	}
+	// The lane still completes its Run once the held turn is released.
+	if _, err := f.p.client.call(f.ctx, "POST", "/fixture/release", nil, 200); err != nil {
+		t.Fatal(err)
+	}
+	if r := f.wait(t, 1); r.Result == nil || r.Result.Outcome != "completed" {
+		t.Fatalf("run after failed aborts=%+v", r)
+	}
+	closeKiloFixture(t, f)
+}
+
+func TestKiloFailedAbortDoesNotAbandonAcceptedInput(t *testing.T) {
+	f := newKiloWorkerFixture(t)
+	f.start(t, 1, "hold-abort-pause")
+	if _, err := f.p.client.call(f.ctx, "GET", "/fixture/started", nil, 200); err != nil {
+		t.Fatal(err)
+	}
+	// Input accepted into the active Run's FIFO before the abort resolves.
+	var receipt kit.DeliveryReceipt
+	f.call(t, "message.deliver", fixtureDelivery(), &receipt)
+	if receipt.Disposition != "injected" {
+		t.Fatalf("delivery not accepted: %+v", receipt)
+	}
+	reply := f.begin(t, "turn.interrupt", map[string]any{"session_id": "ses_native@local"})
+	// Wait until the paused abort request has reached the fake native, so the
+	// captured-op order is deterministic: the native terminal arrives while
+	// the abort attempt is still unresolved.
+	deadline := time.Now().Add(10 * time.Second)
+	for f.abortCount(t) < 1 {
+		if time.Now().After(deadline) {
+			t.Fatal("paused abort never reached native")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	// The native terminal arrives first; then the abort fails. The Run must
+	// re-evaluate and deliver the already accepted input, not abandon it.
+	if _, err := f.p.client.call(f.ctx, "POST", "/fixture/release", nil, 200); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.p.client.call(f.ctx, "POST", "/fixture/abort-release", nil, 200); err != nil {
+		t.Fatal(err)
+	}
+	var frame protocol.Frame
+	select {
+	case frame = <-reply:
+	case <-f.ctx.Done():
+		t.Fatal("interrupt did not settle")
+	}
+	if frame.Error == nil || frame.Error.Code != protocol.Internal {
+		t.Fatalf("paused abort frame=%+v", frame)
+	}
+	if r := f.wait(t, 1); r.Result == nil || r.Result.Outcome != "completed" {
+		t.Fatalf("run after failed abort=%+v", r)
+	}
+	raw, err := f.p.client.call(f.ctx, "GET", "/fixture/state", nil, 200)
+	var state struct {
+		Aborts   int         `json:"aborts"`
+		Messages []withParts `json:"messages"`
+	}
+	if err != nil || json.Unmarshal(raw, &state) != nil {
+		t.Fatalf("lane unreachable after failed abort: %s/%v", raw, err)
+	}
+	delivered := false
+	for _, m := range state.Messages {
+		if m.Info.Role == "user" && strings.Contains(string(m.Parts[0]), "marker") {
+			delivered = true
+		}
+	}
+	if state.Aborts != 1 || !delivered {
+		t.Fatalf("accepted input abandoned: aborts=%d delivered=%v state=%s", state.Aborts, delivered, raw)
 	}
 	closeKiloFixture(t, f)
 }

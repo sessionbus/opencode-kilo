@@ -72,6 +72,8 @@ func fakeNativeHTTP() {
 	var mu sync.Mutex
 	var history []withParts
 	var aborts int
+	var abortMode string
+	var abortHold chan struct{}
 	var rejections int
 	var creates, loads, patches, deletes int
 	var hold chan struct{}
@@ -207,6 +209,16 @@ func fakeNativeHTTP() {
 			interrupted = false
 			hold = make(chan struct{})
 			gate := hold
+			switch text {
+			case "hold-abort-fail":
+				abortMode = "fail"
+			case "hold-abort-false":
+				abortMode = "false"
+			case "hold-abort-pause":
+				abortMode = "pause"
+			default:
+				abortMode = ""
+			}
 			mu.Unlock()
 			emit("session.status", map[string]any{"sessionID": id, "status": map[string]string{"type": "busy"}})
 			startOnce.Do(func() { close(started) })
@@ -300,12 +312,39 @@ func fakeNativeHTTP() {
 			}
 			mu.Lock()
 			aborts++
-			interrupted = true
-			if hold != nil {
-				close(hold)
-				hold = nil
+			mode := abortMode
+			if mode == "" {
+				interrupted = true
+				if hold != nil {
+					close(hold)
+					hold = nil
+				}
+			}
+			var pause chan struct{}
+			if mode == "pause" {
+				abortHold = make(chan struct{})
+				pause = abortHold
 			}
 			mu.Unlock()
+			if mode == "pause" {
+				// The failed-abort race needs the native terminal to arrive while
+				// the abort attempt is still unresolved; release is controlled.
+				select {
+				case <-pause:
+				case <-r.Context().Done():
+					return
+				}
+				http.Error(w, "fixture abort released as failure", 500)
+				return
+			}
+			if mode == "fail" {
+				http.Error(w, "fixture abort failure", 500)
+				return
+			}
+			if mode == "false" {
+				reply(false)
+				return
+			}
 			reply(true)
 		case r.URL.Path == "/permission/per_fixture/reply" || r.URL.Path == "/question/que_fixture/reject":
 			if r.Method != "POST" {
@@ -370,6 +409,14 @@ func fakeNativeHTTP() {
 			if hold != nil {
 				close(hold)
 				hold = nil
+			}
+			mu.Unlock()
+			reply(true)
+		case r.URL.Path == "/fixture/abort-release":
+			mu.Lock()
+			if abortHold != nil {
+				close(abortHold)
+				abortHold = nil
 			}
 			mu.Unlock()
 			reply(true)
