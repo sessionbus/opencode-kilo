@@ -1,17 +1,33 @@
 // SPDX-License-Identifier: MIT
-import { lstat, open } from "node:fs/promises";
+import { lstat, open, unlink } from "node:fs/promises";
 import path from "node:path";
 
 const channelName = (directory) => "sessionbus:endpoint:" + directory;
 
 // Called only by the owning TUI after its endpoint listens. The file remains
 // the readiness authority; the process-local broadcast is only a wake-up.
-export async function publishEndpoint(directory) {
-  const marker = await open(path.join(directory, "actions.ready"), "wx", 0o600);
-  await marker.close();
-  const channel = new BroadcastChannel(channelName(directory));
-  try { channel.postMessage(null); }
-  finally { channel.close(); }
+export async function publishEndpoint(directory, owned) {
+  const file = path.join(directory, "actions.ready");
+  const marker = await open(file, "wx", 0o600);
+  let removing;
+  const remove = () => {
+    removing ||= unlink(file).catch((error) => { if (error.code !== "ENOENT") throw error; });
+    return removing;
+  };
+  try {
+    // Retain cleanup authority before any later publication failure, even if
+    // removing the owned marker also fails. A failed wx never reaches this.
+    owned?.(remove);
+    await marker.close();
+    const channel = new BroadcastChannel(channelName(directory));
+    try { channel.postMessage(null); }
+    finally { channel.close(); }
+  } catch (error) {
+    await remove();
+    throw error;
+  }
+  // Repeated cleanup returns its first outcome and cannot unlink a successor.
+  return remove;
 }
 
 // TUI and server Workers share the native process. BroadcastChannel subscribes
