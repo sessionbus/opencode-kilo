@@ -153,6 +153,24 @@ func (p *Wrapper) executeRun(ctx context.Context, run *kit.Run, input kit.RunInp
 			t.closed = true
 			interrupt, rejects = t.interrupt, t.rejects
 			p.mu.Unlock()
+			if interrupt != nil {
+				<-interrupt.done
+				// A failed native abort is neither a lane end nor a terminal
+				// decision: its goroutine dropped the kept op and its error
+				// stays with the Interrupt caller. Re-check the existing
+				// condition under the lock; remaining accepted input or a
+				// newer interrupt keeps this Run going.
+				if interrupt.err != nil {
+					p.mu.Lock()
+					if err == nil && p.ctx.Err() == nil && (t.interrupt != nil || len(t.inbox) > 0) {
+						t.closed = false
+						interrupt, rejects = t.interrupt, t.rejects
+						p.mu.Unlock()
+						continue
+					}
+					p.mu.Unlock()
+				}
+			}
 			break
 		}
 		text := takeInbox(t)
@@ -177,13 +195,6 @@ func (p *Wrapper) executeRun(ctx context.Context, run *kit.Run, input kit.RunInp
 		p.mu.Unlock()
 		if err == nil {
 			raw, err = op.wait()
-		}
-	}
-	if interrupt != nil {
-		<-interrupt.done
-		if interrupt.err != nil {
-			p.fail(interrupt.err)
-			err = errors.Join(err, interrupt.err)
 		}
 	}
 	// Join the rejections issued before this terminal returned; a later one
@@ -331,25 +342,30 @@ func (p *Wrapper) ensureInterrupt(t *laneRun) *nativeInterrupt {
 		default:
 		}
 		r, e := p.client.prepare(p.ctx, "POST", sessionPath(p.id)+"/abort", []byte(`{}`))
-		if e != nil {
-			op.err = e
-			return
-		}
-		call, e := p.client.beginControl(r, 200)
-		if e != nil {
-			op.err = e
-			p.fail(e)
-			return
-		}
-		b, e := call.wait()
-		if e == nil && strings.TrimSpace(string(b)) != "true" {
-			e = errors.New("native abort not acknowledged")
+		if e == nil {
+			var call *httpOperation
+			if call, e = p.client.beginControl(r, 200); e == nil {
+				var b []byte
+				if b, e = call.wait(); e == nil && strings.TrimSpace(string(b)) != "true" {
+					e = errors.New("native abort not acknowledged")
+				}
+			}
 		}
 		op.err = e
 		op.ack = e == nil
-		if e != nil {
-			p.fail(e)
+		if e == nil {
+			return
 		}
+		// A failed native abort does not end the lane: the settled error stays
+		// with the Interrupt caller, and the kept op is dropped so a later
+		// explicit interrupt calls native again. The attempt is never replayed
+		// automatically, and the settled error publishes before close(op.done)
+		// releases waiters.
+		p.mu.Lock()
+		if t.interrupt == op {
+			t.interrupt = nil
+		}
+		p.mu.Unlock()
 	}()
 	return op
 }
