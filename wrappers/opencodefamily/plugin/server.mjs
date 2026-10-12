@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { nativeProduct } from "./profile.mjs";
 import path from "node:path";
+import { lstat } from "node:fs/promises";
 import declaration from "./sessionbus-tool.json" with { type: "json" };
 import { launchEnvironment, interactiveActivation } from "./activation.mjs";
 import { ReadyGate } from "./gate.mjs";
@@ -8,7 +9,7 @@ import { waitForEndpoint } from "./readiness.mjs";
 import { SessionbusForwarder, bridgeLimits } from "./forward.mjs";
 import { nextPartID, placeHandoffs } from "./delivery.mjs";
 
-export function createServer(environment = launchEnvironment) {
+export function createServer(environment = launchEnvironment, dependencies = {}) {
   let instances = 0, calls = 0;
   return async function server(input) {
     const lane = environment.SESSIONBUS_LANE_SOCKET;
@@ -19,24 +20,61 @@ export function createServer(environment = launchEnvironment) {
     if (instances >= bridgeLimits.connections) throw new Error("Sessionbus native server instance limit reached");
     instances++;
     const lifetime = new AbortController();
-    const ready = new ReadyGate();
-    let forward, connected, disposing;
+    let ready = new ReadyGate();
+    let forward, connected, disposing, starting;
     const ownedCalls = new Set();
-    const starting = (async () => {
-      const endpoint = lane || await waitForEndpoint(launch.directory, lifetime.signal);
+    const rejoin = !lane && nativeProduct.product === "kilo";
+    const start = (endpointPath) => {
+      const gate = ready;
+      const task = (async () => {
+        const endpoint = await endpointPath();
+        if (lifetime.signal.aborted) throw lifetime.signal.reason;
+        if (ready !== gate) throw new Error("Sessionbus connection setup ended");
+        const client = dependencies.forwarder ? dependencies.forwarder(endpoint, lifetime.signal) : new SessionbusForwarder(endpoint, lifetime.signal);
+        forward = client;
+        void client.closed.then(() => {
+          if (!rejoin) return;
+          // Actual close, not a failed request/destroy call, ends ownership.
+          if (forward === client) { forward = undefined; connected = undefined; }
+          gate.settle(new Error("Sessionbus endpoint connection ended"));
+        });
+        await client.ready(lifetime.signal);
+        if (lifetime.signal.aborted) throw lifetime.signal.reason;
+        if (forward !== client || ready !== gate) throw new Error("Sessionbus connection setup ended");
+        connected = client;
+        gate.settle(undefined, client);
+      })().catch((error) => gate.settle(error));
+      starting = task;
+      void task.then(() => { if (starting === task) starting = undefined; });
+    };
+    start(() => lane || waitForEndpoint(launch.directory, lifetime.signal));
+    const clientFor = async (signal) => {
+      if (signal?.aborted) throw signal.reason || new Error("native call cancelled");
       if (lifetime.signal.aborted) throw lifetime.signal.reason;
-      forward = new SessionbusForwarder(endpoint, lifetime.signal);
-      await forward.ready(lifetime.signal);
-      connected = forward;
-      ready.settle(undefined, forward);
-    })().catch((error) => ready.settle(error));
+      if (rejoin && !forward && !starting) {
+        ready = new ReadyGate();
+        start(async () => {
+          // After the old connection ends, an off-state call fails now. Only
+          // initial startup subscribes to readiness; never wait for toggle-on.
+          const marker = await lstat(path.join(launch.directory, "actions.ready"));
+          if (!marker.isFile() || marker.size !== 0) throw new Error("invalid Sessionbus endpoint readiness marker");
+          return path.join(launch.directory, "actions.sock");
+        });
+      }
+      const gate = ready;
+      const client = await gate.wait(signal);
+      if (lifetime.signal.aborted) throw lifetime.signal.reason;
+      if (rejoin && (ready !== gate || forward !== client || connected !== client)) throw new Error("Sessionbus endpoint connection ended");
+      return client;
+    };
     // Busy handoff. chat.message records each session's newest prompt. Before
     // each model call the transform asks the owner (the TUI, or a lane's Go
     // worker) to append queued input to the user message native is answering:
     // the last user at or after that prompt (plugins may add synthetic users
     // after it). A call whose messages lack the newest prompt (compaction passes
-    // an older history head) is not a target. It never waits for readiness and
-    // never throws into native: input not handed off stays with the owner for a
+    // an older history head) is not a target. Initial startup never waits for
+    // readiness; next-use reconnect only tries an available endpoint. It never
+    // throws into native: input not handed off stays with the owner for a
     // later step, the interactive idle wake or the lane Run's last message.
     const latest = new Map();
     // A lane's owner answers through the pinned hidden hook tool, which writes
@@ -78,11 +116,14 @@ export function createServer(environment = launchEnvironment) {
           const user = prompt < 0 ? undefined : messages.findLast((message, index) => index >= prompt && message?.info?.role === "user");
           const sessionID = user?.info?.sessionID;
           if (!user || !Array.isArray(user.parts) || sessionID !== messages[prompt].info.sessionID) return;
-          if (!connected || lifetime.signal.aborted || calls >= bridgeLimits.work) return;
+          if (lifetime.signal.aborted || calls >= bridgeLimits.work) return;
+          // Preserve the hook's initial readiness behavior. After actual close,
+          // this hook is also a next use and can reconnect an available TUI.
+          if (!connected && (!rejoin || starting)) return;
           let after = "";
           for (const part of user.parts) if (typeof part?.id === "string" && part.id > after) after = part.id;
           calls++;
-          const operation = (lane ? laneInput(sessionID, user.info.id, after) : connected.nativeInput({ sessionID, messageID: user.info.id, after }, lifetime.signal))
+          const operation = (lane ? laneInput(sessionID, user.info.id, after) : clientFor(lifetime.signal).then((client) => client.nativeInput({ sessionID, messageID: user.info.id, after }, lifetime.signal)))
             .finally(() => { calls--; ownedCalls.delete(operation); });
           ownedCalls.add(operation);
           const reply = await operation;
@@ -116,7 +157,7 @@ export function createServer(environment = launchEnvironment) {
             calls++;
             const operation = (async () => {
               const abort = native?.abort ? AbortSignal.any([native.abort, lifetime.signal]) : lifetime.signal;
-              const client = await ready.wait(abort);
+              const client = await clientFor(abort);
               return JSON.stringify(await client.action(input.action, input.arguments, { sessionID: native?.sessionID, messageID: native?.messageID, abort }));
             })().finally(() => { calls--; ownedCalls.delete(operation); });
             ownedCalls.add(operation);

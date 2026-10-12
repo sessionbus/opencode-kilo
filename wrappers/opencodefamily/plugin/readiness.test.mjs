@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile, rm, symlink } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, symlink, stat } from "node:fs/promises";
 import test from "node:test";
 import { Worker } from "node:worker_threads";
 import { waitForEndpoint, publishEndpoint } from "./readiness.mjs";
@@ -10,6 +10,19 @@ async function fixture(t) {
   t.after(() => rm(directory, { recursive: true, force: true }));
   return directory;
 }
+
+test("disposal removes its ready marker once; an old or failed publisher cannot remove the successor", async (t) => {
+  const dir = await fixture(t);
+  const remove = await publishEndpoint(dir);
+  await assert.rejects(publishEndpoint(dir), { code: "EEXIST" });
+  assert.equal((await stat(dir + "/actions.ready")).size, 0);
+  await remove();
+  await assert.rejects(stat(dir + "/actions.ready"), { code: "ENOENT" });
+  const successor = await publishEndpoint(dir);
+  await remove();
+  assert.equal((await stat(dir + "/actions.ready")).size, 0);
+  await successor();
+});
 
 function ownedWait(t, directory, lifetime = new AbortController()) {
   const ready = waitForEndpoint(directory, lifetime.signal);

@@ -13,13 +13,15 @@ import { SessionbusForwarder } from "./forward.mjs";
 async function fixture(t) {
   const directory = await mkdtemp("/tmp/oc-tui-");
   const binding = { directory, pid: process.ppid, socket: directory + "/bus", name: "first", groups: ["one", "two"] };
-  const events = new EventEmitter(), life = new AbortController(), disposals = new Set();
-  const sockets = new Set(), hellos = [], updates = [], creates = [];
+  const events = new EventEmitter();
+  let life = new AbortController(), disposals = new Set();
+  const sockets = new Set(), wires = new Map(), titles = new Map(), hellos = [], updates = [], creates = [], wakes = [];
   let stallCreate = false;
+  let releaseCreate;
   const server = net.createServer((stream) => {
     sockets.add(stream); stream.once("close", () => sockets.delete(stream));
     const wire = new Connection(stream, false, (request) => {
-      if (request.method === "session.hello") { hellos.push(request.params); void wire.result(request, {}); }
+      if (request.method === "session.hello") { hellos.push(request.params); wires.set(request.params.session_id, wire); void wire.result(request, {}); }
       else void wire.result(request, { sessions: [] });
     });
   });
@@ -31,21 +33,96 @@ async function fixture(t) {
   const api = { route: { current: { name: "home" }, navigate(name, params) { api.route.current = { name, params }; effect?.(); } }, lifecycle: { signal: life.signal, onDispose(callback) { disposals.add(callback); return () => disposals.delete(callback); } },
     event: { on(type, callback) { events.on(type, callback); return () => events.off(type, callback); } },
     client: { session: {
-      async get({ sessionID }) { return { response: { status: 200 }, data: { id: sessionID, title: "", directory: "/native" } }; },
+      async get({ sessionID }) { return { response: { status: 200 }, data: { id: sessionID, title: titles.get(sessionID) || "", directory: "/native" } }; },
       async status() { return { response: { status: 200 }, data: {} }; },
-      async update(params) { updates.push(params); return { response: { status: 200 }, data: { id: params.sessionID, title: params.title, directory: "/native" } }; },
+      async update(params) { updates.push(params); titles.set(params.sessionID, params.title); return { response: { status: 200 }, data: { id: params.sessionID, title: params.title, directory: "/native" } }; },
+      async promptAsync(params) { wakes.push(params); return { response: { status: 204 } }; },
       async create(params, options) {
         creates.push(params);
         // A stalled request ends only through its abort signal, if it has one.
         if (stallCreate) await new Promise((_, reject) => options?.signal?.addEventListener("abort", () => reject(options.signal.reason), { once: true }));
+        if (releaseCreate) await releaseCreate.promise;
         return { response: { status: 200 }, data: { id: "ses_created", title: params.title || "", directory: "/native" } };
       },
-    } },
+    }, permission: { async list() { return { response: { status: 200 }, data: [] }; } }, question: { async list() { return { response: { status: 200 }, data: [] }; } } },
+    state: { session: { permission: () => [], question: () => [] } },
   };
   const close = async () => { life.abort(); await Promise.all([...disposals].map((callback) => callback())); };
   t.after(async () => { await close(); for (const socket of sockets) socket.destroy(); await new Promise((resolve) => server.close(resolve)); await rm(directory, { recursive: true, force: true }); });
-  return { directory, binding, api, solid, hellos, updates, creates, close, stall() { stallCreate = true; }, rootDisposed: () => disposedRoot, route(id) { api.route.current = { name: "session", params: { sessionID: id } }; effect(); } };
+  return { directory, binding, api, solid, hellos, updates, creates, wakes, wires, close,
+    reopen() {
+      life = new AbortController(); disposals = new Set();
+      const set = disposals;
+      return { ...api, lifecycle: { signal: life.signal, onDispose(callback) { set.add(callback); return () => set.delete(callback); } } };
+    },
+    holdCreate() {
+      let resolve;
+      releaseCreate = { promise: new Promise((yes) => { resolve = yes; }) };
+      return () => { resolve(); releaseCreate = undefined; };
+    },
+    title(id, value) { titles.set(id, value); },
+    stall() { stallCreate = true; }, rootDisposed: () => disposedRoot, route(id) { api.route.current = { name: "session", params: { sessionID: id } }; effect(); } };
 }
+
+test("toggle-on in the same function restores exact ownership and inbound wake without a second create or rename", { timeout: 5000 }, async (t) => {
+  const f = await fixture(t), env = { [nativeProduct.launchEnv]: JSON.stringify({ ...f.binding, create: true }) };
+  const start = createTui(env, { solid: f.solid });
+  await start(f.api);
+  const first = new SessionbusForwarder(f.directory + "/actions.sock");
+  await first.action("list", {}, { sessionID: "ses_created", messageID: "msg_first" });
+  await first.dispose();
+  await f.close();
+  await assert.rejects(stat(f.directory + "/actions.ready"), { code: "ENOENT" });
+  assert.equal((await stat(f.directory + "/owner.claim")).size, 0);
+  // A foreign function (as in another module/process) still cannot acquire it.
+  await assert.rejects(createTui(env, { solid: f.solid })(f.reopen()), { code: "EEXIST" });
+  await f.close();
+  f.title("ses_created", "native title while off");
+  await start(f.reopen());
+  const second = new SessionbusForwarder(f.directory + "/actions.sock");
+  t.after(() => second.dispose());
+  await second.action("list", {}, { sessionID: "ses_created", messageID: "msg_second" });
+  const restored = f.hellos.at(-1);
+  assert.equal(restored.session_id, "ses_created");
+  assert.equal(restored.name, "native title while off");
+  assert.deepEqual(restored.groups, f.binding.groups);
+  assert.equal(f.creates.length, 1);
+  assert.deepEqual(f.updates, [{ sessionID: "ses_created", title: "first" }]);
+  const receipt = await f.wires.get("ses_created").call("message.deliver", { message_id: "toggle_wake", body: "new input", from: { session_id: "controller", product: "test", groups: [] } });
+  assert.equal(receipt.disposition, "written");
+  assert.equal(f.wakes.length, 1);
+  assert.match(f.wakes[0].parts[0].text, /toggle_wake/);
+});
+
+test("pending disposal refuses toggle-on and cannot remove a later activation's ready marker", { timeout: 5000 }, async (t) => {
+  const f = await fixture(t), release = f.holdCreate();
+  const start = createTui({ [nativeProduct.launchEnv]: JSON.stringify({ ...f.binding, create: true }) }, { solid: f.solid });
+  const setup = start(f.api);
+  while (!f.creates.length) await new Promise((resolve) => setImmediate(resolve));
+  const closing = f.close();
+  await assert.rejects(start(f.reopen()), { code: "EEXIST" });
+  release();
+  await setup; await closing;
+  await start(f.reopen());
+  assert.equal(f.creates.length, 1, "uncertain first creation is never repeated");
+  assert.equal((await stat(f.directory + "/actions.ready")).size, 0);
+  await closing;
+  assert.equal((await stat(f.directory + "/actions.ready")).size, 0, "old disposal has no authority over the successor");
+});
+
+test("failed cleanup keeps the grant reserved instead of allowing an overlapping owner", { timeout: 5000 }, async (t) => {
+  const f = await fixture(t);
+  const register = f.api.lifecycle.onDispose;
+  f.api.lifecycle.onDispose = (callback) => {
+    const unregister = register(callback);
+    return () => { unregister(); throw new Error("cleanup failed"); };
+  };
+  const start = createTui({ [nativeProduct.launchEnv]: JSON.stringify(f.binding) }, { solid: f.solid });
+  await start(f.api);
+  await assert.rejects(f.close(), /cleanup failed/);
+  await assert.rejects(start(f.reopen()), { code: "EEXIST" });
+  assert.equal((await stat(f.directory + "/owner.claim")).size, 0);
+});
 
 test("ordinary TUI is inert before loading host reactivity or creating resources", async (t) => {
   const f = await fixture(t);

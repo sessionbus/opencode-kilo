@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-import { lstat, open } from "node:fs/promises";
+import { lstat, open, unlink } from "node:fs/promises";
 import path from "node:path";
 
 const channelName = (directory) => "sessionbus:endpoint:" + directory;
@@ -7,11 +7,25 @@ const channelName = (directory) => "sessionbus:endpoint:" + directory;
 // Called only by the owning TUI after its endpoint listens. The file remains
 // the readiness authority; the process-local broadcast is only a wake-up.
 export async function publishEndpoint(directory) {
-  const marker = await open(path.join(directory, "actions.ready"), "wx", 0o600);
-  await marker.close();
-  const channel = new BroadcastChannel(channelName(directory));
-  try { channel.postMessage(null); }
-  finally { channel.close(); }
+  const file = path.join(directory, "actions.ready");
+  const marker = await open(file, "wx", 0o600);
+  let removing;
+  const remove = () => {
+    removing ||= unlink(file).catch((error) => { if (error.code !== "ENOENT") throw error; });
+    return removing;
+  };
+  try {
+    await marker.close();
+    const channel = new BroadcastChannel(channelName(directory));
+    try { channel.postMessage(null); }
+    finally { channel.close(); }
+  } catch (error) {
+    await remove();
+    throw error;
+  }
+  // Only the successful publisher owns this cleanup. A failed exclusive open
+  // must never remove another activation's marker.
+  return remove;
 }
 
 // TUI and server Workers share the native process. BroadcastChannel subscribes

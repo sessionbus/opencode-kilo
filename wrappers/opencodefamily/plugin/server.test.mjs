@@ -8,6 +8,7 @@ import { createServer } from "./server.mjs";
 import { interactiveActivation, claimInteractive } from "./activation.mjs";
 import { InteractiveEndpoint } from "./endpoint.mjs";
 import { publishEndpoint } from "./readiness.mjs";
+import { SessionbusForwarder } from "./forward.mjs";
 
 async function fixture(t) {
   const directory = await mkdtemp("/tmp/sb-server-");
@@ -16,6 +17,74 @@ async function fixture(t) {
   return { directory, binding, environment: { [nativeProduct.launchEnv]: JSON.stringify(binding) } };
 }
 const native = { sessionID:"ses_actual", messageID:"msg_actual", abort:new AbortController().signal };
+
+async function rejoinFixture(t) {
+  const f = await fixture(t), clients = [];
+  const hooks = await createServer(f.environment, { forwarder: (...args) => {
+    const client = new SessionbusForwarder(...args); clients.push(client); return client;
+  } })();
+  t.after(() => hooks.dispose());
+  const activate = async (action, input) => {
+    const endpoint = new InteractiveEndpoint(f.directory + "/actions.sock", action, input);
+    t.after(() => endpoint.dispose());
+    await endpoint.ready();
+    const remove = await publishEndpoint(f.directory);
+    t.after(remove);
+    return async () => {
+      await remove(); await endpoint.dispose();
+      await clients.at(-1).closed; // actual receiver-side close, no timing guess
+    };
+  };
+  const call = (argumentsValue, context = native) => hooks.tool.sessionbus.execute({ action: "list", arguments: argumentsValue }, context);
+  return { hooks, clients, activate, call };
+}
+
+test("after toggle-off tools fail now; concurrent next uses share one replacement and never replay the old call", { timeout: 5000 }, async (t) => {
+  const f = await rejoinFixture(t), oldCalls = [], newCalls = [];
+  let entered;
+  const holding = new Promise((resolve) => { entered = resolve; });
+  const off = await f.activate(async (_action, args, context) => {
+    oldCalls.push(args);
+    if (args.hold) {
+      entered();
+      await new Promise((_, reject) => context.signal.addEventListener("abort", () => reject(context.signal.reason), { once: true }));
+    }
+    return { id: context.sessionID };
+  });
+  await f.call({ initial: true });
+  const pending = f.call({ hold: true });
+  const rejected = assert.rejects(pending, /ended|closed/);
+  await holding;
+  await off(); await rejected;
+  await assert.rejects(f.call({ whileOff: true }), /ENOENT/);
+  assert.equal(f.clients.length, 1, "off-state calls create no reconnect waiter/client");
+  const cancel = new AbortController(); cancel.abort(new Error("cancelled before reconnect"));
+  await assert.rejects(f.call({}, { ...native, abort: cancel.signal }), /cancelled before reconnect/);
+  assert.equal(f.clients.length, 1);
+  await f.activate(async (_action, args, context) => { newCalls.push(args); return { id: context.sessionID, message: context.messageID }; });
+  const replies = await Promise.all(["one", "two", "three"].map((id) => f.call({ id }, { ...native, sessionID: "ses_" + id, messageID: "msg_" + id })));
+  assert.deepEqual(replies.map(JSON.parse), ["one", "two", "three"].map((id) => ({ id: "ses_" + id, message: "msg_" + id })));
+  assert.equal(f.clients.length, 2, "one shared new connection after the old one actually ended");
+  assert.deepEqual(newCalls, [{ id: "one" }, { id: "two" }, { id: "three" }]);
+  assert.deepEqual(oldCalls, [{ initial: true }, { hold: true }]);
+});
+
+test("the first model-step hook after toggle-on reconnects rather than losing same-task input", { timeout: 5000 }, async (t) => {
+  const f = await rejoinFixture(t);
+  const off = await f.activate(async () => ({}));
+  await f.call({}); await off();
+  const requests = [];
+  await f.activate(async () => ({}), async (params) => {
+    requests.push(params);
+    return { parts: [{ id: "prt_000000000002ABCDEFGHIJKLMN", sessionID: params.sessionID, messageID: params.messageID, type: "text", text: "change from peer after toggle" }] };
+  });
+  await f.hooks["chat.message"]({}, { message: { role: "user", sessionID: "ses_actual", id: "msg_task" } });
+  const output = { messages: [{ info: { role: "user", sessionID: "ses_actual", id: "msg_task" }, parts: [{ id: "prt_000000000001ABCDEFGHIJKLMN", type: "text", text: "original task" }] }] };
+  await f.hooks["experimental.chat.messages.transform"]({}, output);
+  assert.equal(f.clients.length, 2);
+  assert.deepEqual(requests, [{ sessionID: "ses_actual", messageID: "msg_task", after: "prt_000000000001ABCDEFGHIJKLMN" }]);
+  assert.ok(output.messages[0].parts.some((part) => part.text === "change from peer after toggle"));
+});
 
 test("ordinary and inherited foreign-parent launches return no tool or owner", async (t) => {
   assert.deepEqual(await createServer({})(), {});
