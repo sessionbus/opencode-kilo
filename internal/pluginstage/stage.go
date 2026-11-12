@@ -14,8 +14,8 @@ import (
 // (wrappers/opencode/plugin) over the shared Peer and envelope modules.
 var runtimeFiles = map[string][]string{
 	"kilo": {"activation.mjs", "delivery.mjs", "endpoint.mjs", "forward.mjs", "gate.mjs",
-		"owners.mjs", "peer.mjs", "profile.mjs", "readiness.mjs", "server.mjs", "tui.mjs"},
-	"opencode": {"delivery.mjs", "forward.mjs", "gate.mjs", "peer.mjs", "profile.mjs"},
+		"owners.mjs", "peer.mjs", "profile.mjs", "readiness.mjs", "server.mjs", "transfer-paths.mjs", "tui.mjs"},
+	"opencode": {"delivery.mjs", "forward.mjs", "gate.mjs", "peer.mjs", "profile.mjs", "transfer-paths.mjs"},
 }
 var productFiles = map[string][]string{
 	"opencode": {"server.mjs", "tui.mjs", "contract.mjs"},
@@ -23,7 +23,7 @@ var productFiles = map[string][]string{
 var testFiles = map[string][]string{
 	"kilo": {"delivery.test.mjs", "endpoint.test.mjs", "forward.test.mjs", "owners.test.mjs",
 		"peer.test.mjs", "readiness.test.mjs", "readiness-fixture.mjs", "server.test.mjs", "tui.test.mjs",
-		"review-delivery-idle.test.mjs", "review-delivery-receipt.test.mjs", "forward-fixture.mjs", "busy-handoff.test.mjs"},
+		"review-delivery-idle.test.mjs", "review-delivery-receipt.test.mjs", "forward-fixture.mjs", "busy-handoff.test.mjs", "transfer-paths.test.mjs"},
 	// The shared Peer module's own tests run in the Kilo stage.
 	"opencode": {},
 }

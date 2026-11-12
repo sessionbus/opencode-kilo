@@ -36,7 +36,7 @@ func TestRepositoryBoundary(t *testing.T) {
 
 func TestModuleAndImportBoundary(t *testing.T) {
 	mod := string(read(t, "go.mod"))
-	for _, s := range []string{"module github.com/sessionbus/opencode-kilo", "github.com/sessionbus/peer-common v0.0.0-20260929104500-c5551a29654c", "github.com/antst/sessionbus/bus/sdk/go v0.5.12"} {
+	for _, s := range []string{"module github.com/sessionbus/opencode-kilo", "github.com/sessionbus/peer-common v0.0.0-20261112015618-29ddcb4585de\n", "github.com/antst/sessionbus/bus/sdk/go v0.5.14\n"} {
 		if !strings.Contains(mod, s) {
 			t.Errorf("missing module binding %q", s)
 		}
@@ -97,10 +97,10 @@ func testNativePackageBoundary(t *testing.T, product string) {
 	if manifest.Name != "@sessionbus/"+product || len(manifest.Bin) != 0 {
 		t.Fatalf("Native package unexpectedly requires a Node installer: %#v", manifest)
 	}
-	wantFiles := []string{"README.md", "activation.mjs", "delivery.mjs", "endpoint.mjs", "forward.mjs", "gate.mjs", "owners.mjs", "peer.mjs", "profile.mjs", "readiness.mjs", "server.mjs", "sessionbus-tool.json", "skills", "tui.mjs"}
+	wantFiles := []string{"README.md", "activation.mjs", "delivery.mjs", "endpoint.mjs", "forward.mjs", "gate.mjs", "owners.mjs", "peer.mjs", "profile.mjs", "readiness.mjs", "server.mjs", "sessionbus-tool.json", "skills", "transfer-paths.mjs", "tui.mjs"}
 	if product == "opencode" {
 		// OpenCode v2 entries over the shared Peer and envelope modules.
-		wantFiles = []string{"README.md", "contract.mjs", "delivery.mjs", "forward.mjs", "gate.mjs", "peer.mjs", "profile.mjs", "server.mjs", "sessionbus-tool.json", "skills", "tui.mjs"}
+		wantFiles = []string{"README.md", "contract.mjs", "delivery.mjs", "forward.mjs", "gate.mjs", "peer.mjs", "profile.mjs", "server.mjs", "sessionbus-tool.json", "skills", "transfer-paths.mjs", "tui.mjs"}
 	}
 	sort.Strings(manifest.Files)
 	if !equalStrings(manifest.Files, wantFiles) {
@@ -109,7 +109,7 @@ func testNativePackageBoundary(t *testing.T, product string) {
 	if manifest.Repository.Type != "git" || manifest.Repository.URL != "git+https://github.com/sessionbus/opencode-kilo.git" || manifest.Repository.Directory != product {
 		t.Errorf("Native repository metadata is invalid: %#v", manifest.Repository)
 	}
-	if len(manifest.Dependencies) != 1 || manifest.Dependencies["@sessionbus/kit"] != "0.5.12" || strings.HasPrefix(manifest.Dependencies["@sessionbus/kit"], "file:") {
+	if len(manifest.Dependencies) != 1 || manifest.Dependencies["@sessionbus/kit"] != "0.5.15" || strings.HasPrefix(manifest.Dependencies["@sessionbus/kit"], "file:") {
 		t.Errorf("Native kit dependency is not exact: %q", manifest.Dependencies["@sessionbus/kit"])
 	}
 	workflow := read(t, ".github/workflows/pkg-pr-new.yml")

@@ -17,7 +17,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: gen-opencode-tool OUTPUT_JSON")
 		os.Exit(1)
 	}
-	data, err := json.MarshalIndent(mcp.Tool(), "", "  ")
+	data, err := json.Marshal(mcp.Tool())
 	if err == nil {
 		err = os.WriteFile(os.Args[1], append(data, '\n'), 0o644)
 	}

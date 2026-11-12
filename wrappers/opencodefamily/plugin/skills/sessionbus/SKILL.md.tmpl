@@ -7,7 +7,8 @@ description: Discover and message Sessionbus peers, trace direct child traffic, 
 
 Use the native `sessionbus` tool with exactly `{action, arguments}`. The actions
 are list, send, describe, spawn, trace, run, start, status, wait, ack, interrupt,
-close and forget. Follow the advertised schema; do not invent convenience methods,
+close, forget, transfer.offer, transfer.request, transfer.accept, transfer.cancel
+and transfer.status. Follow the advertised schema; do not invent convenience methods,
 shell substitutes, another transport or a native delegation tool to repair a
 failed Sessionbus call.
 

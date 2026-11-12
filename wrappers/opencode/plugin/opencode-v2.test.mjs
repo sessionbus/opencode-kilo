@@ -1229,3 +1229,32 @@ test("tui: an unavailable service waits for the next native event; any other fai
   assert.equal(ctx.calls.length, 3);
   assert.match(ctx.toasts.at(-1).message, /no sessionbus plugin/u);
 });
+
+test("transfer paths bind once to the native location for interactive and lane tools", async (t) => {
+  const peers = fakePeers(), lanes = fakeForwarders();
+  const ctx = serverContext(t);
+  ctx.location.directory = "/native/location";
+  const cleanup = await createServer({ peer: peers.peer, forwarder: lanes.forwarder })(ctx);
+  t.after(cleanup);
+  await ctx.handlers.activate({ sessionID: "ses_peer", socket: "/bus.sock", groups: [] });
+  await ctx.handlers.lane({ sessionID: "ses_lane", socket: "/lane.sock" });
+  for (const [sessionID, recorded] of [["ses_peer", peers.peers[0].actions], ["ses_lane", lanes.forwards[0].actions]]) {
+    const context = { sessionID, messageID: "msg_transfer" };
+    const args = { target: "other@host", source: "symlink/../source" };
+    await ctx.tool.added.execute({ action: "transfer.offer", arguments: args }, context);
+    assert.deepEqual(recorded.at(-1).slice(0, 2), ["transfer.offer", { ...args, source: "/native/location/symlink/../source" }]);
+    assert.equal(args.source, "symlink/../source", "model arguments are not mutated");
+    await ctx.tool.added.execute({ action: "transfer.request", arguments: { target: "other@host", what: "report", destination: "out" } }, context);
+    assert.equal(recorded.at(-1)[1].destination, "/native/location/out");
+    const before = recorded.length;
+    await assert.rejects(ctx.tool.added.execute({ action: "transfer.accept", arguments: { id: "x", Destination: "out" } }, context), /unknown field/);
+    assert.equal(recorded.length, before, "alias is rejected before either transport");
+    ctx.location.directory = "";
+    await assert.rejects(ctx.tool.added.execute({ action: "transfer.accept", arguments: { id: "x", source: "in" } }, context), /working directory is unknown/);
+    await ctx.tool.added.execute({ action: "transfer.accept", arguments: { id: "x", source: "/absolute/in" } }, context);
+    assert.equal(recorded.at(-1)[1].source, "/absolute/in");
+    await ctx.tool.added.execute({ action: "list", arguments: {} }, context);
+    assert.deepEqual(recorded.at(-1).slice(0, 2), ["list", {}], "ordinary tool calls survive refusal");
+    ctx.location.directory = "/native/location";
+  }
+});

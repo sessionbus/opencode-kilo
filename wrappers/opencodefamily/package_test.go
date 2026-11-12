@@ -106,11 +106,11 @@ func testLiteralNativeArchive(t *testing.T, product string) {
 	if skills != 1 {
 		t.Fatal("wrong generic skill count", skills)
 	}
-	entries := []string{"server.mjs", "tui.mjs", "peer.mjs", "owners.mjs", "delivery.mjs", "sessionbus-tool.json"}
+	entries := []string{"server.mjs", "tui.mjs", "peer.mjs", "owners.mjs", "delivery.mjs", "sessionbus-tool.json", "transfer-paths.mjs"}
 	// Without managed launch metadata neither native entry activates.
 	imports := `import server from './server.mjs'; import tui from './tui.mjs'; if (Object.keys(await server.server()).length || await tui.tui({}) !== undefined) throw Error('ordinary activation');`
 	if product == "opencode" {
-		entries = []string{"server.mjs", "tui.mjs", "contract.mjs", "peer.mjs", "delivery.mjs", "sessionbus-tool.json"}
+		entries = []string{"server.mjs", "tui.mjs", "contract.mjs", "peer.mjs", "delivery.mjs", "sessionbus-tool.json", "transfer-paths.mjs"}
 		imports = `import server from './server.mjs'; import tui from './tui.mjs'; if (server.id !== 'sessionbus' || typeof server.setup !== 'function' || await tui.setup({}) !== undefined) throw Error('ordinary activation');`
 	}
 	for _, entry := range entries {
@@ -223,7 +223,7 @@ func testLiteralNativeArchive(t *testing.T, product string) {
 	if err := json.Unmarshal(b, &manifest); err != nil {
 		t.Fatal(err)
 	}
-	if manifest.Bin != nil || len(manifest.Dependencies) != 1 || manifest.Dependencies["@sessionbus/kit"] != "0.5.12" {
+	if manifest.Bin != nil || len(manifest.Dependencies) != 1 || manifest.Dependencies["@sessionbus/kit"] != "0.5.15" {
 		t.Fatal("wrong installed dependency or installer", manifest)
 	}
 	remove := exec.Command(filepath.Join(root, product+"-peer"), "--sessionbus-install", "--remove")
