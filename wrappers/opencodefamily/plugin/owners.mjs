@@ -5,6 +5,7 @@ import { validate } from "@sessionbus/kit";
 import { OwnedPeer } from "./peer.mjs";
 import { NativeDelivery, deliveryLimits, nextPartID } from "./delivery.mjs";
 import { ReadyGate } from "./gate.mjs";
+import { bindTransferPaths } from "./transfer-paths.mjs";
 
 export const ownerLimits = Object.freeze({ owners: 128, establishing: 16, http: 256 });
 const object = (value) => value && typeof value === "object" && !Array.isArray(value);
@@ -296,7 +297,7 @@ export class NativeOwners {
     const record = this.#ensure(context.sessionID);
     await record.gate.wait(context.signal);
     this.#check(record);
-    return record.peer.action(action, args, context.signal);
+    return record.peer.action(action, bindTransferPaths(action, args, record.info.directory), context.signal);
   }
 
   // Busy handoff from the native model-step hook. Only an established owner of

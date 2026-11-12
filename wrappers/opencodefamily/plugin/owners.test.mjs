@@ -11,6 +11,7 @@ import test from "node:test";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { Connection } from "@sessionbus/kit";
 import { NativeOwners } from "./owners.mjs";
+import { OwnedPeer } from "./peer.mjs";
 import { InteractiveEndpoint } from "./endpoint.mjs";
 import { SessionbusForwarder } from "./forward.mjs";
 
@@ -635,4 +636,33 @@ test("a superseded owner stays displaced across a native session update: no seco
   await new Promise((resolve) => setTimeout(resolve, 100));
   await assert.rejects(f.action("ses_target"), /superseded/);
   assert.equal(hellos, 1);
+});
+
+test("interactive transfer binding follows the exact native owner's directory", { timeout: 5000 }, async (t) => {
+  // Preserve the real owner lookup/admission path; observe the existing dispatch
+  // boundary rather than substituting a second transfer engine.
+  const actions = [];
+  t.mock.method(OwnedPeer.prototype, "action", async function (action, args) { actions.push([action, args]); return {}; });
+  const f = await fixture(t);
+  const context = { sessionID: "ses_paths", signal: new AbortController().signal };
+  const args = { target: "other@host", source: "link/../source" };
+  await f.owners.action("transfer.offer", args, context);
+  assert.deepEqual(actions.at(-1), ["transfer.offer", { ...args, source: "/native/project/link/../source" }]);
+  assert.equal(args.source, "link/../source");
+  const hello = once(f.hello, "ses_paths");
+  f.events.emit("session.updated", { properties: { info: { ...info("ses_paths"), directory: "/changed/project" } } });
+  await hello;
+  await f.owners.action("transfer.accept", { id: "x", destination: "out" }, context);
+  assert.equal(actions.at(-1)[1].destination, "/changed/project/out");
+  const before = actions.length;
+  await assert.rejects(f.owners.action("transfer.offer", { target: "other@host", Source: "relative" }, context), /unknown field/);
+  assert.equal(actions.length, before);
+  const unknown = once(f.hello, "ses_paths");
+  f.events.emit("session.updated", { properties: { info: { ...info("ses_paths"), directory: "" } } });
+  await unknown;
+  await assert.rejects(f.owners.action("transfer.request", { target: "other@host", what: "report", destination: "out" }, context), /working directory is unknown/);
+  await f.owners.action("transfer.accept", { id: "x", source: "/absolute/in" }, context);
+  assert.equal(actions.at(-1)[1].source, "/absolute/in");
+  await f.action("ses_paths");
+  assert.deepEqual(actions.at(-1), ["list", {}]);
 });

@@ -26,7 +26,8 @@
     "profile.mjs",
     "delivery.mjs",
     "sessionbus-tool.json",
-    "skills"
+    "skills",
+    "transfer-paths.mjs"
   ],
   "publishConfig": {
     "access": "public"
@@ -37,6 +38,6 @@
     "directory": "kilo"
   },
   "dependencies": {
-    "@sessionbus/kit": "0.5.12"
+    "@sessionbus/kit": "0.5.14"
   }
 }

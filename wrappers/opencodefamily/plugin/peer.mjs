@@ -151,7 +151,7 @@ export class OwnedPeer {
     for (const [socket] of sockets) socket.destroy();
     this.#dispose = (async () => {
       await Promise.all(sockets.map(([, closed]) => closed));
-      await Promise.allSettled([...this.#tasks]);
+      await Promise.allSettled([...this.#tasks, this.#peer.closed]);
     })();
     return this.#dispose;
   }

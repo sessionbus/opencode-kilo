@@ -23,7 +23,8 @@
     "delivery.mjs",
     "forward.mjs",
     "sessionbus-tool.json",
-    "skills"
+    "skills",
+    "transfer-paths.mjs"
   ],
   "publishConfig": {
     "access": "public"
@@ -34,6 +35,6 @@
     "directory": "opencode"
   },
   "dependencies": {
-    "@sessionbus/kit": "0.5.12"
+    "@sessionbus/kit": "0.5.14"
   }
 }

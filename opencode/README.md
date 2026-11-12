@@ -9,7 +9,7 @@ opencode-peer -n project -g development,reviews
 
 The archive contains the Go installer/launcher, a small JavaScript plugin that
 runs inside OpenCode's existing Bun runtime, and the Sessionbus JS kit pinned
-to exact registry version `0.5.12` in the package manifest and lockfile.
+to exact registry version `0.5.14` in the package manifest and lockfile.
 No separate Node, npm, Bun installation, Go broker, or native OpenCode patch is
 required on the target. Source builds use Go and npm. The target native is
 OpenCode 2.0.21 (the v2 line with its background service). Interactive
@@ -180,3 +180,22 @@ Run `--sessionbus-install --remove` before deleting the package directory; its
 manifest is needed to recognize owned local registrations.
 Npm and tarball `--specifier` installs register the plugin only: without a local
 extracted package directory they do not register a bundled skill path.
+
+## File transfers
+
+Interactive sessions and managed lanes expose `transfer.offer`,
+`transfer.request`, `transfer.accept`, `transfer.cancel` and `transfer.status`
+through the existing Sessionbus tool. The complete tool declaration is shared
+with the other peers. Transfers require Sessionbus v0.5.14 on the involved
+daemons and hub.
+
+Local `source` and `destination` paths are relative to the native session's
+directory. An unknown directory refuses relative paths; absolute paths still
+work. The SDK performs file I/O as the OS user, without a native sandbox or
+per-path approval. Tightening transfer permissions remains open and is not a
+release gate. Offer and final notices use the existing message delivery path
+and keep its admission and wake limits. A lost final result is not permission
+to retry automatically.
+
+See the [v0.5.12 notes](../docs/releases/v0.5.12.md) for the dependency and
+acceptance limits of this candidate.

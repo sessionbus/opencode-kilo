@@ -12,7 +12,7 @@ import (
 )
 
 func TestNativeDeclarationEqualsSharedTool(t *testing.T) {
-	want, err := json.MarshalIndent(mcp.Tool(), "", "  ")
+	want, err := json.Marshal(mcp.Tool())
 	if err != nil {
 		t.Fatal(err)
 	}

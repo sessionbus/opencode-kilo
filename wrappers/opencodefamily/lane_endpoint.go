@@ -190,6 +190,10 @@ func (p *Wrapper) ToolEnded() { p.fail(p.kind.err("resident tool connection ende
 func (p *Wrapper) ToolAction(ctx context.Context, sessionID, _, action string, args json.RawMessage) (json.RawMessage, error) {
 	p.mu.Lock()
 	ready, caller := p.opened && !p.closing, p.caller
+	directory := ""
+	if p.client != nil {
+		directory = p.client.directory
+	}
 	p.mu.Unlock()
 	if !ready || caller == nil {
 		return nil, p.kind.err("lane not adopted")
@@ -197,7 +201,11 @@ func (p *Wrapper) ToolAction(ctx context.Context, sessionID, _, action string, a
 	if err := p.ownsSession(ctx, sessionID); err != nil {
 		return nil, err
 	}
-	return caller.Action(ctx, action, args)
+	bound, err := mcp.BindTransferPaths(action, args, directory)
+	if err != nil {
+		return nil, err
+	}
+	return caller.Action(ctx, action, bound)
 }
 func (p *Wrapper) ownsSession(ctx context.Context, id string) error {
 	p.mu.Lock()

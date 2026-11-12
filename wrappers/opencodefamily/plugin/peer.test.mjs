@@ -8,7 +8,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { Connection } from "@sessionbus/kit";
+import { Connection, Peer } from "@sessionbus/kit";
 import { OwnedPeer } from "./peer.mjs";
 import { createServer } from "./server.mjs";
 import { InteractiveEndpoint } from "./endpoint.mjs";
@@ -247,4 +247,26 @@ test("a superseded peer rejects ready and actions at once while the kit's closed
   assert.ok(displaced(peer.signal.reason));
   await assert.rejects(peer.ready(), displaced);
   await assert.rejects(peer.action("list", {}), displaced);
+});
+
+test("dispose waits for the kit's public closed promise", { timeout: 5000 }, async (t) => {
+  const retirement = deferred();
+  t.after(() => retirement.resolve());
+  const shutdown = Peer.prototype.shutdown;
+  t.mock.method(Peer.prototype, "shutdown", function () {
+    shutdown.call(this);
+    // Model the stronger public SDK closed contract without reaching into
+    // private transfer state or implementing a second retirement mechanism.
+    this.closed = retirement.promise;
+  });
+  const env = await fixture(t, (wire, request) => wire.result(request, {}));
+  const peer = own(t, env);
+  await peer.ready();
+  let done = false;
+  const closing = peer.dispose().then(() => { done = true; });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(done, false, "socket closure is not transfer retirement");
+  retirement.resolve();
+  await closing;
+  assert.equal(done, true);
 });

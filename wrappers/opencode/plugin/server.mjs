@@ -5,6 +5,7 @@ import { contract } from "./contract.mjs";
 import { renderDelivery } from "./delivery.mjs";
 import { SessionbusForwarder } from "./forward.mjs";
 import { OwnedPeer } from "./peer.mjs";
+import { bindTransferPaths } from "./transfer-paths.mjs";
 
 // Sessionbus attachment for OpenCode v2 sessions a managed TUI activated. The
 // Peers belong to this location's plugin instance: when native unloads an idle
@@ -242,9 +243,10 @@ export function createServer(dependencies = {}) {
         const entry = await owner(context.sessionID);
         if (!entry) throw new Error("Sessionbus is not active for this OpenCode session");
         if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length !== 2 || !Object.hasOwn(input, "action") || !Object.hasOwn(input, "arguments")) throw new Error("expected Sessionbus action and arguments");
+        const args = bindTransferPaths(input.action, input.arguments, ctx.location.directory);
         const result = entry.forward
-          ? await entry.forward.action(input.action, input.arguments, { sessionID: context.sessionID, messageID: context.messageID, abort: context.signal })
-          : await entry.peer.action(input.action, input.arguments, context.signal);
+          ? await entry.forward.action(input.action, args, { sessionID: context.sessionID, messageID: context.messageID, abort: context.signal })
+          : await entry.peer.action(input.action, args, context.signal);
         return { content: JSON.stringify(result) };
       },
     }));
