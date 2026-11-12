@@ -250,21 +250,26 @@ test("a superseded peer rejects ready and actions at once while the kit's closed
 });
 
 test("dispose waits for the kit's public closed promise", { timeout: 5000 }, async (t) => {
-  const retirement = deferred();
+  const retirement = deferred(), awaited = deferred();
   t.after(() => retirement.resolve());
   const shutdown = Peer.prototype.shutdown;
   t.mock.method(Peer.prototype, "shutdown", function () {
     shutdown.call(this);
     // Model the stronger public SDK closed contract without reaching into
     // private transfer state or implementing a second retirement mechanism.
-    this.closed = retirement.promise;
+    this.closed = { then(resolve, reject) {
+      awaited.resolve();
+      return retirement.promise.then(resolve, reject);
+    } };
   });
   const env = await fixture(t, (wire, request) => wire.result(request, {}));
   const peer = own(t, env);
   await peer.ready();
   let done = false;
   const closing = peer.dispose().then(() => { done = true; });
-  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(await Promise.race([
+    awaited.promise.then(() => "awaited"), closing.then(() => "closed"),
+  ]), "awaited", "dispose must await the public closed promise");
   assert.equal(done, false, "socket closure is not transfer retirement");
   retirement.resolve();
   await closing;
