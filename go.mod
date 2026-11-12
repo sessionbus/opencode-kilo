@@ -3,7 +3,7 @@ module github.com/sessionbus/opencode-kilo
 go 1.24
 
 require (
-	github.com/antst/sessionbus/bus/sdk/go v0.5.14
+	github.com/antst/sessionbus/bus/sdk/go v0.5.16
 	github.com/sessionbus/peer-common v0.0.0-20261112015618-29ddcb4585de
 	golang.org/x/sys v0.30.0
 )
