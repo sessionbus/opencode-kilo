@@ -9,7 +9,7 @@ opencode-peer -n project -g development,reviews
 
 The archive contains the Go installer/launcher, a small JavaScript plugin that
 runs inside OpenCode's existing Bun runtime, and the Sessionbus JS kit pinned
-to exact registry version `0.5.15` in the package manifest and lockfile.
+to exact registry version `0.5.16` in the package manifest and lockfile.
 No separate Node, npm, Bun installation, Go broker, or native OpenCode patch is
 required on the target. Source builds use Go and npm. The target native is
 OpenCode 2.0.21 (the v2 line with its background service). Interactive
@@ -197,5 +197,5 @@ release gate. Offer and final notices use the existing message delivery path
 and keep its admission and wake limits. A lost final result is not permission
 to retry automatically.
 
-See the [v0.5.12 notes](../docs/releases/v0.5.12.md) for the dependency and
+See the [v0.5.13 notes](../docs/releases/v0.5.13.md) for the dependency and
 acceptance limits of this candidate.
